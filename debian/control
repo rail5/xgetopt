@@ -1,0 +1,20 @@
+Source: xgetopt-dev
+Priority: optional
+Maintainer: rail5 <andrew@rail5.org>
+Build-Depends: debhelper (>= 10.0.0)
+Standards-Version: 3.9.3
+Section: utils
+
+Package: xgetopt-dev
+Version: 0.9
+License: GPL-2+
+Vendor: rail5 <andrew@rail5.org>
+Priority: optional
+Architecture: all
+Depends: ${misc:Depends}
+Description: Simple, header-only, constexpr-first C++20 command-line option parser
+ XGetOpt is a lightweight, header-only C++20 library for parsing command-line
+ options.
+ .
+ It supports both short and long options, optional and required arguments, and
+ generates help messages at compile time.

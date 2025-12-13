@@ -1,0 +1,6 @@
+#!/usr/bin/make -f
+%:
+	dh $@
+
+override_dh_auto_install:
+	install -D -m 0644 xgetopt.h "$$(pwd)/debian/xgetopt-dev/usr/include/xgetopt.h"
