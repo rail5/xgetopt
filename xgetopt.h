@@ -27,6 +27,7 @@
 #include <cstdint>
 #include <stdexcept>
 #include <iostream>
+#include <algorithm>
 
 namespace XGetOpt {
 
@@ -61,20 +62,36 @@ class ParsedOption {
 		ParsedOption(int s, std::optional<std::string_view> arg)
 			: shortopt(s), argument(arg) {}
 		
+		/**
+		 * @brief Get the shortopt of this parsed option (or the unique integer identifier for long-only options)
+		 * 
+		 * @return int The shortopt character or unique integer identifier
+		 */
 		int getShortOpt() const {
 			return shortopt;
 		}
 
+		/**
+		 * @brief Check if this option was given with an argument
+		 * 
+		 * @return true if an argument was provided
+		 * @return false if no argument was provided
+		 */
 		bool hasArgument() const {
 			return argument.has_value();
 		}
 
+		/**
+		 * @brief Get the argument provided for this option
+		 * 
+		 * @return std::string_view The argument string
+		 * @throws std::runtime_error if no argument was provided (you should check hasArgument() first if the argument is optional)
+		 */
 		std::string_view getArgument() const {
-			if (argument.has_value()) {
-				return argument.value();
-			} else {
+			if (!argument.has_value()) {
 				throw std::runtime_error("No argument present for this option");
 			}
+			return argument.value();
 		}
 };
 
@@ -115,6 +132,25 @@ class OptionSequence {
 			return options.at(index);
 		}
 
+		/**
+		 * @brief Check whether a specific option was provided
+		 * 
+		 * @param shortopt The shortopt character or unique integer identifier to check for
+		 * @return true if the option was provided
+		 * @return false if the option was not provided
+		 */
+		bool hasOption(int shortopt) const {
+			return std::any_of(options.begin(), options.end(),
+				[shortopt](const ParsedOption& opt) {
+					return opt.getShortOpt() == shortopt;
+				});
+		}
+
+		/**
+		 * @brief Get a std::vector of all non-option arguments provided, in the order they were given
+		 * 
+		 * @return const std::vector<std::string_view>& The vector of non-option arguments
+		 */
 		const std::vector<std::string_view>& getNonOptionArguments() const {
 			return nonOptionArguments;
 		}
@@ -240,12 +276,22 @@ struct OptionParser {
 
 		OptionParser() = delete;
 
-		// Default capacity; still usable as: constexpr auto h = parser.generateHelpString();
-		// But, if your help string is extraordinarily large, you may want to specify a larger size.
+		/**
+		 * @brief Get a compile-time generated help string detailing all available options and their descriptions
+		 * 
+		 * @return constexpr XGetOpt::FixedString<4096> The generated help string, with a maximum size of 4096 bytes
+		 */
 		constexpr auto generateHelpString() const {
 			return generateHelpString<4096>(options);
 		}
 
+		/**
+		 * @brief Get a compile-time generated help string detailing all available options and their descriptions
+		 * 
+		 * @tparam MaxSize The maximum size of the help string to generate
+		 * @param options The array of options to generate the help string for
+		 * @return constexpr XGetOpt::FixedString<MaxSize> The generated help string
+		 */
 		template<size_t MaxSize>
 		static constexpr auto generateHelpString(const OptionArray<N>& options) {
 			FixedString<MaxSize> help_string;
@@ -295,6 +341,13 @@ struct OptionParser {
 			return help_string;
 		}
 
+		/**
+		 * @brief Parse command-line arguments according to the defined options
+		 * 
+		 * @param argc The number of command-line arguments
+		 * @param argv The array of command-line argument strings
+		 * @return OptionSequence The parsed options and their values
+		 */
 		OptionSequence parse(int argc, char* argv[]) const {
 			OptionSequence parsed_options;
 

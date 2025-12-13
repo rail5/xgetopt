@@ -142,6 +142,14 @@ for (const auto& arg : options.getNonOptionArguments()) {
 
 These non-option arguments are stored in the order they were provided on the command line.
 
+The `hasOption(int shortopt)` member function allows you to check if a specific option was provided.
+
+```cpp
+if (options.hasOption('h')) {
+	// '-h' was one of the options specified by the user
+}
+```
+
 ## License
 
 XGetOpt is released under the GNU General Public License v2 or later. See the [LICENSE](LICENSE) file for details.
