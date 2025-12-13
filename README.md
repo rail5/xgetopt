@@ -68,12 +68,12 @@ int main(int argc, char* argv[]) {
 The generated help string looks like this:
 
 ```
-  -h, --help                  Display this help message
-  -o, --output <arg>          Specify output file
-  -p, --parameter [arg]       Specify optional parameter
-	  --long-option-only      This has no shortopt
-	  --long-option-with-arg <arg> This has no shortopt and requires an argument
-  -s                          This has no longopt
+  -h, --help                       Display this help message
+  -o, --output <arg>               Specify output file
+  -p, --parameter [arg]            Specify optional parameter
+      --long-option-only           This has no shortopt
+      --long-option-with-arg <arg> This has no shortopt and requires an argument
+  -s                               This has no longopt
 ```
 
 And is fully generated at compile-time.
