@@ -335,10 +335,6 @@ struct OptionParser {
 			short_options[shortopt_index] = '\0';
 
 			// Parse options
-			#define HAS_OPTIONAL_ARGUMENT \
-				((optarg == NULL && optind < argc && argv[optind][0] != '-') \
-				? static_cast<bool>(optarg = argv[optind++]) \
-				: (optarg != NULL))
 
 			// Don't let getopt print messages.
 			opterr = 0;
@@ -434,12 +430,36 @@ struct OptionParser {
 					argument = std::string_view(optarg);
 				} else {
 					// Check if the option accepts an optional argument
+					// GNU Getopt's behavior is maybe a bit odd, or unexpected at least.
+					// If an option is defined to take an optional argument, then either:
+					// 1) The argument is given as part of the same argv token, e.g. "--opt=arg" or "-oarg"
+					//    In this case, getopt sets optarg = "arg" as expected.
+					// 2) No argument is given, in which case optarg = NULL, again, as expected.
+					// 3) The argument is given as **the next** argv token, e.g. "--opt arg" or "-o arg".
+					//    In this case, getopt sets optarg = NULL, but keeps the next argv token intact.
+					//    This is a bit counterintuitive and needs to be handled specially here.
 					for (size_t i = 0; i < N; i++) {
+						// First, we check if this option is expected to handle an optional argument.
 						if (options[i].shortopt == opt
 							&& options[i].argRequirement == XGetOpt::ArgumentRequirement::OptionalArgument
-							&& HAS_OPTIONAL_ARGUMENT
 						) {
-							argument = std::string_view(optarg);
+							// If it's meant to handle an optional argument, let's process it
+							bool has_optional_argument = [&]() {
+								// CHECK: optarg not set, we're not at the end of options, and the next one doesn't start with '-'
+								if (optarg == NULL && optind < argc && argv[optind][0] != '-') {
+									// If so, set optarg = the next argument,
+									// Increment the opt-index to tell getopt to skip the next one since we've already handled it
+									// And evaluate to true (has_optional_argument = true)
+									optarg = argv[optind];
+									optind++;
+									return true;
+								} else {
+									// Otherwise, evaluate to true if optarg is set, false if not
+									return (optarg != NULL);
+								}
+							}();
+							// If an optional argument is present, set it
+							if (has_optional_argument) argument = std::string_view(optarg);
 							break;
 						}
 					}
