@@ -55,6 +55,9 @@ int main(int argc, char* argv[]) {
 					std::cout << "Parameter option with no argument" << std::endl;
 				}
 				break;
+			case 1001: // --long-option-only
+				std::cout << "--long-option-only given" << std::endl;
+				break;
 			// Etc
 		}
 	}
