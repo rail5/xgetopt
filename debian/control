@@ -1,4 +1,4 @@
-Source: xgetopt-dev
+Source: xgetopt
 Priority: optional
 Maintainer: rail5 <andrew@rail5.org>
 Build-Depends: debhelper (>= 10.0.0)
