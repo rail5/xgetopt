@@ -14,6 +14,7 @@
 #define XGETOPT_H_
 
 // Throw a compiler error if the C++ version is less than C++20
+#include <cstddef>
 #if __cplusplus < 202002L
 #error "xgetopt.h requires C++20 or later"
 #endif
@@ -268,6 +269,58 @@ using OptionArray = std::array<Option, N>;
 template<size_t N>
 struct OptionParser {
 		const OptionArray<N> options;
+		const std::array<char, 3*N + 1> short_options = build_short_options_(options);
+		const std::array<struct option, N + 1> long_options = build_long_options_(options);
+
+		constexpr std::array<struct option, N + 1> build_long_options_(const OptionArray<N>& opts) {
+			std::array<struct option, N + 1> long_opts{};
+
+			for (size_t i = 0; i < N; i++) {
+				long_opts[i].name = (opts[i].longopt && opts[i].longopt[0] != '\0')
+					? opts[i].longopt
+					: nullptr;
+				long_opts[i].has_arg = static_cast<int>(opts[i].argRequirement);
+				long_opts[i].flag = nullptr;
+				long_opts[i].val = opts[i].shortopt;
+			}
+
+			// Null-terminate the array
+			long_opts[N] = {nullptr, 0, nullptr, 0};
+			return long_opts;
+		}
+
+		constexpr std::array<char, 3*N + 1> build_short_options_(const OptionArray<N>& opts) {
+			size_t short_opt_index = 0;
+			std::array<char, 3*N + 1> short_opts{};
+
+			// GNU getopt extension: RETURN_IN_ORDER
+			// Non-option arguments are returned as character code 1, with optarg set to the argument string.
+			short_opts[short_opt_index++] = '-';
+
+			for (size_t i = 0; i < N; i++) {
+				if (opts[i].shortopt >= 33 && opts[i].shortopt <= 126) {
+					short_opts[short_opt_index++] = static_cast<char>(opts[i].shortopt);
+					switch (opts[i].argRequirement) {
+						case XGetOpt::ArgumentRequirement::RequiredArgument:
+							short_opts[short_opt_index++] = ':';
+							break;
+						case XGetOpt::ArgumentRequirement::OptionalArgument:
+							short_opts[short_opt_index++] = ':';
+							short_opts[short_opt_index++] = ':';
+							break;
+						case XGetOpt::ArgumentRequirement::NoArgument:
+						default:
+							// No extra characters needed
+							break;
+					}
+				}
+			}
+
+			// Null-terminate the array
+			short_opts[short_opt_index] = '\0';
+			return short_opts;
+		}
+
 		explicit constexpr OptionParser(OptionArray<N> opts) : options(opts) {}
 
 		// Variadic constructor
@@ -351,44 +404,6 @@ struct OptionParser {
 		OptionSequence parse(int argc, char* argv[]) const {
 			OptionSequence parsed_options;
 
-			// Build getopt_long structures
-			struct option long_options[N + 1]; // +1 for the terminating sentinel
-
-			// Worst-case short optstring growth per option: "c::" => 3 chars
-			// +2 for leading '-' (RETURN_IN_ORDER) and trailing '\0'
-			char short_options[3 * N + 2];
-			size_t shortopt_index = 0;
-
-			// GNU getopt extension: RETURN_IN_ORDER
-			// Non-option arguments are returned as opt == 1, with optarg set.
-			short_options[shortopt_index++] = '-';
-
-			for (size_t i = 0; i < N; i++) {
-				long_options[i].name = (options[i].longopt && options[i].longopt[0] != '\0')
-					? options[i].longopt
-					: nullptr;
-				long_options[i].has_arg = static_cast<int>(options[i].argRequirement);
-				long_options[i].flag = nullptr;
-				long_options[i].val = options[i].shortopt;
-
-				// Build short options string
-				if (options[i].shortopt >= 33 && options[i].shortopt <= 126) {
-					short_options[shortopt_index++] = static_cast<char>(options[i].shortopt);
-					if (options[i].argRequirement == XGetOpt::ArgumentRequirement::RequiredArgument) {
-						short_options[shortopt_index++] = ':';
-					} else if (options[i].argRequirement == XGetOpt::ArgumentRequirement::OptionalArgument) {
-						short_options[shortopt_index++] = ':';
-						short_options[shortopt_index++] = ':';
-					}
-				}
-			}
-
-			// Null-terminate the arrays
-			long_options[N] = {0, 0, 0, 0};
-			short_options[shortopt_index] = '\0';
-
-			// Parse options
-
 			// Don't let getopt print messages.
 			opterr = 0;
 
@@ -425,7 +440,7 @@ struct OptionParser {
 
 			int opt;
 			int longindex = 0;
-			while ((opt = getopt_long(argc, argv, short_options, long_options, &longindex)) != -1) {
+			while ((opt = getopt_long(argc, argv, short_options.data(), long_options.data(), &longindex)) != -1) {
 				// Non-option argument (in-order)
 				if (opt == 1) {
 					if (optarg != nullptr) {
