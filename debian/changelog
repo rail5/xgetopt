@@ -1,4 +1,16 @@
-xgetopt (0.9) unstable; urgency=low
+xgetopt (0.9.1) unstable; urgency=medium
+
+  * Constexpr all the things: Build getopt_long arrays at compile-time
+    The options and all their information are known at compile-time,
+    therefore there's nothing stopping us from building the shortopt
+    and longopt arrays needed by GNU getopt at compile-time in .rodata
+    instead of building them on the stack at runtime when parse() is
+    called.
+  * Minor change: include <cstddef> for size_t definition
+
+ -- rail5 <andrew@rail5.org>  Sun, 14 Dec 2025 10:34:16 +0800
+
+xgetopt (0.9.0) unstable; urgency=low
 
   * Initial release
 
