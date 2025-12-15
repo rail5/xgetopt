@@ -32,8 +32,6 @@ int main(int argc, char* argv[]) {
 		XGetOpt::Option('s', "", "This has no longopt", XGetOpt::NoArgument)
 	);
 	
-	constexpr auto help = parser.generateHelpString();
-
 	XGetOpt::OptionSequence options;
 
 	try { // .parse() will throw an exception if invalid options are provided
@@ -46,7 +44,7 @@ int main(int argc, char* argv[]) {
 	for (const auto& opt : options) {
 		switch (opt.getShortOpt()) {
 			case 'h':
-				std::cout << help;
+				std::cout << parser.getHelpString();
 				return 0;
 			case 'p': // Optional argument
 				if (opt.hasArgument()) {
