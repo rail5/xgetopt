@@ -1,3 +1,10 @@
+xgetopt (0.10.0) unstable; urgency=medium
+
+  * Interface changed slightly,
+    helpstring buffer size configurable
+
+ -- rail5 <andrew@rail5.org>  Mon, 15 Dec 2025 20:52:59 +0800
+
 xgetopt (0.9.1) unstable; urgency=medium
 
   * Constexpr all the things: Build getopt_long arrays at compile-time
