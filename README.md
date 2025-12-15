@@ -96,8 +96,29 @@ constexpr XGetOpt::OptionParser parser(
 
 Once an `OptionParser` is constructed, the following member functions are available:
 
- - `generateHelpString()`: Provides a compile-time generated help string detailing all options and their descriptions.
+ - `getHelpString()`: Provides a compile-time generated help string detailing all options and their descriptions.
  - `parse(int argc, char* argv[])`: Parses the command-line arguments and returns an `XGetOpt::OptionSequence` containing the parsed options and non-option arguments.
+
+#### Compile-Time Generated Help String
+
+The help string is generated at compile-time based on the options provided to the `OptionParser` constructor. and is stored as a member of the instantiated `OptionParser`.
+
+Because it's generated at compile-time, a fixed-sized buffer is given to the string. This is, by default, 4096 bytes, which should be more than enough for most applications. If the generated string exceeds the buffer limit, you'll get a compile-time error. If this happens, you can increase the size of the buffer by defining the `XGETOPT_HELPSTRING_BUFFER_SIZE` macro before including `xgetopt.h`.
+
+```cpp
+#define XGETOPT_HELPSTRING_BUFFER_SIZE 8192
+#include "xgetopt.h"
+```
+
+Though it's unlikely any application will come up against this 4096-byte default limit. Nevertheless, the option is provided for edge cases.
+
+> *Note to potential contributors*: it would be infinitely preferable if the buffer size could be determined dynamically at compile-time based on the options provided.
+>
+> If the array of options was declared as a static, global variable, there would be absolutely no difficulty here. We would declare a `consteval auto` function, which as its first step would calculate `constexpr size_t RequiredLength = calculate_help_string_length(OptionArray)`, and then would return a `FixedString<RequiredLength>`.
+>
+> However, it seems that even though the OptionParser class has a `constexpr` constructor, and the object and all of its properties are **fixed** and **known** at compile-time, the fact that the options array is (and must be) a non-static data member of the class precludes us from using data about it in a constant expression like that.
+>
+> If anyone sees any clever solutions to this, please contribute.
 
 ### `Option` Class
 

@@ -14,8 +14,6 @@ int main(int argc, char* argv[]) {
 		XGetOpt::Option(1002, "long-option-with-arg", "This has no shortopt and requires an argument", XGetOpt::RequiredArgument),
 		XGetOpt::Option('s', "", "This has no longopt", XGetOpt::NoArgument)
 	);
-	
-	constexpr auto help = parser.generateHelpString();
 
 	XGetOpt::OptionSequence options;
 	try {
@@ -28,7 +26,7 @@ int main(int argc, char* argv[]) {
 	for (const auto& opt : options) {
 		switch (opt.getShortOpt()) {
 			case 'h':
-				std::cout << help;
+				std::cout << parser.getHelpString();
 				return 0;
 			case 'o':
 				std::cout << "Output file: " << opt.getArgument() << std::endl;

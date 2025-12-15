@@ -14,9 +14,34 @@
 #define XGETOPT_H_
 
 // Throw a compiler error if the C++ version is less than C++20
-#include <cstddef>
 #if __cplusplus < 202002L
 #error "xgetopt.h requires C++20 or later"
+#endif
+
+/**
+ * ----------------------------------
+ * THE NUCLEAR OPTION FOR USER CONFIG
+ * ----------------------------------
+ * Define XGETOPT_HELPSTRING_BUFFER_SIZE to a specific size (in bytes) before including this header
+ * to override the default help string buffer size of 4096 bytes.
+ *
+ * Since the help string is generated at compile-time, it needs a fixed-size buffer.
+ * If your help string exceeds the default size,
+ *   or if it's much smaller and you want to shrink the resulting binary,
+ * you can override the default size like so:
+ *  #define XGETOPT_HELPSTRING_BUFFER_SIZE 8192
+ *  #include "xgetopt.h"
+ *
+ * Just make sure to define it before including this header.
+ * ----------------------------------
+ *
+ * NOTE: I would very much prefer if this buffer size were determined dynamically at compile-time based on the options provided.
+ * In fact, all of the necessary information is available at compile-time to do so.
+ * But it seems we just can't *get at* that information in a way that allows us to define a member array size based on it.
+ * If there are any clever C++ developers who see a way around this, please contribute!
+ */
+#ifndef XGETOPT_HELPSTRING_BUFFER_SIZE
+#define XGETOPT_HELPSTRING_BUFFER_SIZE 4096
 #endif
 
 #include <getopt.h>
@@ -29,6 +54,7 @@
 #include <stdexcept>
 #include <iostream>
 #include <algorithm>
+#include <cstddef>
 
 namespace XGetOpt {
 
@@ -267,10 +293,13 @@ template<size_t N>
 using OptionArray = std::array<Option, N>;
 
 template<size_t N>
-struct OptionParser {
+class OptionParser {
+	private:
 		const OptionArray<N> options;
 		const std::array<char, 3*N + 1> short_options = build_short_options_(options);
 		const std::array<struct option, N + 1> long_options = build_long_options_(options);
+		const FixedString<XGETOPT_HELPSTRING_BUFFER_SIZE> help_string
+			= generateHelpString<XGETOPT_HELPSTRING_BUFFER_SIZE>(options);
 
 		constexpr std::array<struct option, N + 1> build_long_options_(const OptionArray<N>& opts) {
 			std::array<struct option, N + 1> long_opts{};
@@ -321,30 +350,13 @@ struct OptionParser {
 			return short_opts;
 		}
 
-		explicit constexpr OptionParser(OptionArray<N> opts) : options(opts) {}
-
-		// Variadic constructor
-		template<typename... Options>
-		explicit constexpr OptionParser(Options... opts) : options{opts...} {}
-
-		OptionParser() = delete;
-
 		/**
-		 * @brief Get a compile-time generated help string detailing all available options and their descriptions
-		 * 
-		 * @return constexpr XGetOpt::FixedString<4096> The generated help string, with a maximum size of 4096 bytes
-		 */
-		constexpr auto generateHelpString() const {
-			return generateHelpString<4096>(options);
-		}
-
-		/**
-		 * @brief Get a compile-time generated help string detailing all available options and their descriptions
-		 * 
-		 * @tparam MaxSize The maximum size of the help string to generate
-		 * @param options The array of options to generate the help string for
-		 * @return constexpr XGetOpt::FixedString<MaxSize> The generated help string
-		 */
+		* @brief Get a compile-time generated help string detailing all available options and their descriptions
+		* 
+		* @tparam MaxSize The maximum size of the help string to generate
+		* @param options The array of options to generate the help string for
+		* @return constexpr XGetOpt::FixedString<MaxSize> The generated help string
+		*/
 		template<size_t MaxSize>
 		static constexpr auto generateHelpString(const OptionArray<N>& options) {
 			FixedString<MaxSize> help_string;
@@ -393,14 +405,37 @@ struct OptionParser {
 			// No need to append '\0' (ostream<< and string_view don't require it)
 			return help_string;
 		}
+	
+	public:
+		explicit constexpr OptionParser(OptionArray<N> opts) : options(opts) {}
+
+		// Variadic constructor
+		template<typename... Options>
+		explicit constexpr OptionParser(Options... opts) : options{opts...} {}
+
+		OptionParser() = delete;
 
 		/**
-		 * @brief Parse command-line arguments according to the defined options
-		 * 
-		 * @param argc The number of command-line arguments
-		 * @param argv The array of command-line argument strings
-		 * @return OptionSequence The parsed options and their values
-		 */
+			* @brief Get the help string for this option parser
+			*
+			* The help string details each available option, its short and long forms,
+			* whether it requires an argument, whether it accepts an optional argument, and its description.
+			*
+			* The string is generated at compile-time based on the options defined in the parser.
+			* 
+			* @return std::string_view The help string
+			*/
+		std::string_view getHelpString() const {
+			return help_string.view();
+		}
+
+		/**
+		* @brief Parse command-line arguments according to the defined options
+		* 
+		* @param argc The number of command-line arguments
+		* @param argv The array of command-line argument strings
+		* @return OptionSequence The parsed options and their values
+		*/
 		OptionSequence parse(int argc, char* argv[]) const {
 			OptionSequence parsed_options;
 
@@ -545,5 +580,7 @@ template<typename... Options>
 OptionParser(Options...) -> OptionParser<sizeof...(Options)>;
 
 } // namespace XGetOpt
+
+#undef XGETOPT_HELPSTRING_BUFFER_SIZE
 
 #endif // XGETOPT_H_
