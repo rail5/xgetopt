@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2025 Andrew S. Rightenburg
+ * Copyright (C) 2025-2026 Andrew S. Rightenburg
  *
  * XGetOpt is a C++20 compile-time wrapper around getopt_long for parsing command-line options.
  * It allows defining options at compile-time and automatically generates help strings without runtime overhead.
@@ -542,17 +542,19 @@ class OptionParser {
 		static constexpr std::array<struct option, N + 1> build_long_options_(const OptionArray& opts) {
 			std::array<struct option, N + 1> long_opts{};
 
+			size_t idx = 0;
+
 			for (size_t i = 0; i < N; i++) {
-				long_opts[i].name = (opts[i].longopt.length() > 0)
-					? opts[i].longopt.c_str()
-					: nullptr;
-				long_opts[i].has_arg = static_cast<int>(opts[i].argRequirement);
-				long_opts[i].flag = nullptr;
-				long_opts[i].val = opts[i].shortopt;
+				if (opts[i].longopt.length() == 0) continue;
+				long_opts[idx].name = opts[i].longopt.c_str();
+				long_opts[idx].has_arg = static_cast<int>(opts[i].argRequirement);
+				long_opts[idx].flag = nullptr;
+				long_opts[idx].val = opts[i].shortopt;
+				idx++;
 			}
 
 			// Null-terminate the array (GNU getopt expects a sentinel)
-			long_opts[N] = {nullptr, 0, nullptr, 0};
+			long_opts[idx] = {nullptr, 0, nullptr, 0};
 			return long_opts;
 		}
 
