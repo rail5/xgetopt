@@ -671,6 +671,10 @@ class OptionParser {
 			return help_string.view();
 		}
 
+		constexpr const OptionArray& getOptions() const {
+			return options;
+		}
+
 		/**
 		 * @brief Parse command-line arguments according to the defined options
 		 * 

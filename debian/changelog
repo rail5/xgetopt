@@ -7,6 +7,7 @@ xgetopt (0.11.0) unstable; urgency=medium
     Improved internal option label formatting logic.
   * Added support for argument placeholders in help output (e.g., <file> for
     output).
+  * Added getOptions() method to retrieve defined options.
   * Improved help string formatting:
     Required arguments now display as <placeholder>.
     Optional arguments for long options display as [=placeholder], matching GNU

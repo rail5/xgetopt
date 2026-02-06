@@ -93,6 +93,7 @@ Methods available:
 
  - `parse(int argc, char* argv[])`: Parses the command-line arguments and returns an `OptionSequence` containing the parsed options and non-option arguments. Throws an exception if invalid options are provided.
  - `getHelpString()`: Returns the compile-time generated help string for the defined options.
+ - `getOptions()`: Returns the array of defined options.
 
 #### Compile-Time Generated Help String
 
