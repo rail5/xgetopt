@@ -111,17 +111,16 @@ int main(int argc, char* argv[]) {
 			// Base program options processing...
 		}
 
-		if (remainder.argc > 0) {
-			std::string_view subcommandName = remainder.argv[0];
+		if (remainder.argc == 0) {
+			return 0; // No subcommand, done
+		}
 
-			if (subcommandName == "subcmd") {
-				auto subOptions = subCommandParser.parse(remainder.argc, remainder.argv);
-				for (const auto& opt : subOptions) {
-					// Subcommand options processing...
-				}
-			} else {
-				std::cerr << "Unknown subcommand: " << subcommandName << std::endl;
-				return 1;
+		std::string_view subcommandName = remainder.argv[0];
+
+		if (subcommandName == "subcmd") {
+			auto subOptions = subCommandParser.parse(remainder.argc, remainder.argv);
+			for (const auto& opt : subOptions) {
+				// Subcommand options processing...
 			}
 		}
 	} catch (const std::exception& e) {
