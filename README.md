@@ -21,15 +21,15 @@ Underneath, it is actually just a wrapper around GNU `getopt_long` with a more c
 #include <iostream>
 
 int main(int argc, char* argv[]) {
-	constexpr XGetOpt::OptionParser parser(
-		XGetOpt::Option('h', "help", "Display this help message", XGetOpt::NoArgument),
-		XGetOpt::Option('o', "output", "Specify output file", XGetOpt::RequiredArgument),
-		XGetOpt::Option('p', "parameter", "Specify optional parameter", XGetOpt::OptionalArgument),
+	constexpr auto parser = XGETOPT_PARSER(
+		XGETOPT_OPTION('h', "help", "Display this help message", XGetOpt::NoArgument),
+		XGETOPT_OPTION('o', "output", "Specify output file", XGetOpt::RequiredArgument, "file"),
+		XGETOPT_OPTION('p', "parameter", "Specify optional parameter", XGetOpt::OptionalArgument),
 
-		XGetOpt::Option(1001, "long-option-only", "This has no shortopt", XGetOpt::NoArgument),
-		XGetOpt::Option(1002, "long-option-with-arg", "This has no shortopt and requires an argument", XGetOpt::RequiredArgument),
+		XGETOPT_OPTION(1001, "long-option-only", "This has no shortopt", XGetOpt::NoArgument),
+		XGETOPT_OPTION(1002, "long-option-with-arg", "This has no shortopt and requires an argument", XGetOpt::RequiredArgument),
 
-		XGetOpt::Option('s', "", "This has no longopt", XGetOpt::NoArgument)
+		XGETOPT_OPTION('s', "", "This has no longopt", XGetOpt::NoArgument)
 	);
 	
 	XGetOpt::OptionSequence options;
@@ -70,8 +70,8 @@ The generated help string looks like this:
 
 ```
   -h, --help                       Display this help message
-  -o, --output <arg>               Specify output file
-  -p, --parameter [arg]            Specify optional parameter
+  -o, --output <file>              Specify output file
+  -p, --parameter[=arg]            Specify optional parameter
       --long-option-only           This has no shortopt
       --long-option-with-arg <arg> This has no shortopt and requires an argument
   -s                               This has no longopt
@@ -79,54 +79,63 @@ The generated help string looks like this:
 
 And is fully generated at compile-time.
 
+## API Reference
+
+It is recommended to use the `XGETOPT_PARSER` and `XGETOPT_OPTION` macros to define your option parser and options, as shown in the example above.
+
 ### `OptionParser` Class
 
-`XGetOpt::OptionParser` is the main entry point for defining and working with command-line options.
+`XGetOpt::OptionParser` is the main class used to define and parse command-line options. It is a `constexpr` class that takes a variable number of `Option` definitions as template parameters.
 
-The options accepted by the program must be provided in the **constructor** of `OptionParser` as a variadic list of `XGetOpt::Option` objects.
+You can create an `OptionParser` instance using the `XGETOPT_PARSER` macro, which simplifies the syntax.
 
-```cpp
-constexpr XGetOpt::OptionParser parser(
-	XGetOpt::Option('h', "help", "Display this help message", XGetOpt::NoArgument),
-	XGetOpt::Option('o', "output", "Specify output file", XGetOpt::RequiredArgument)
-);
-```
+Methods available:
 
-Once an `OptionParser` is constructed, the following member functions are available:
-
- - `getHelpString()`: Provides a compile-time generated help string detailing all options and their descriptions.
- - `parse(int argc, char* argv[])`: Parses the command-line arguments and returns an `XGetOpt::OptionSequence` containing the parsed options and non-option arguments.
+ - `parse(int argc, char* argv[])`: Parses the command-line arguments and returns an `OptionSequence` containing the parsed options and non-option arguments. Throws an exception if invalid options are provided.
+ - `getHelpString()`: Returns the compile-time generated help string for the defined options.
 
 #### Compile-Time Generated Help String
 
-The help string is generated at compile-time based on the options provided to the `OptionParser` constructor. and is stored as a member of the instantiated `OptionParser`.
+The help string is generated at compile-time based on the options provided to the `OptionParser`. This means that you don't have to manually maintain help text that matches your options; it is always in sync.
 
-Because it's generated at compile-time, a fixed-sized buffer is given to the string. This is, by default, 4096 bytes, which should be more than enough for most applications. If the generated string exceeds the buffer limit, you'll get a compile-time error. If this happens, you can increase the size of the buffer by defining the `XGETOPT_HELPSTRING_BUFFER_SIZE` macro before including `xgetopt.h`.
+The descriptions for each option will automatically wrap at 80 characters for better readability in terminal output. For example:
 
 ```cpp
-#define XGETOPT_HELPSTRING_BUFFER_SIZE 8192
-#include "xgetopt.h"
+	constexpr auto parser = XGETOPT_PARSER(
+		XGETOPT_OPTION('h', "help",
+			"Display this help message and exit.",
+			XGetOpt::ArgumentRequirement::NoArgument),
+		XGETOPT_OPTION('v', "verbose",
+			"This option has an extremely long description that is intended to test the help string generation functionality of the XGetOpt library. XGetOpt should correctly format this description across multiple lines, ensuring that it remains readable and well-structured within the constraints of an 80-character line limit.",
+			XGetOpt::ArgumentRequirement::NoArgument)
+	);
 ```
 
-Though it's unlikely any application will come up against this 4096-byte default limit. Nevertheless, the option is provided for edge cases.
+Produces the following help string:
 
-> *Note to potential contributors*: it would be infinitely preferable if the buffer size could be determined dynamically at compile-time based on the options provided.
->
-> If the array of options was declared as a static, global variable, there would be absolutely no difficulty here. We would declare a `consteval auto` function, which as its first step would calculate `constexpr size_t RequiredLength = calculate_help_string_length(OptionArray)`, and then would return a `FixedString<RequiredLength>`.
->
-> However, it seems that even though the OptionParser class has a `constexpr` constructor, and the object and all of its properties are **fixed** and **known** at compile-time, the fact that the options array is (and must be) a non-static data member of the class precludes us from using data about it in a constant expression like that.
->
-> If anyone sees any clever solutions to this, please contribute.
+```cpp
+  -h, --help    Display this help message and exit.
+  -v, --verbose This option has an extremely long description that is intended 
+                to test the help string generation functionality of the XGetOpt 
+                library. XGetOpt should correctly format this description across
+                multiple lines, ensuring that it remains readable and 
+                well-structured within the constraints of an 80-character line 
+                limit.
+```
+
 
 ### `Option` Class
 
-`XGetOpt::Option` represents a single command-line option. It is constructed with the following parameters:
+`XGetOpt::Option` represents a single command-line option. It contains:
 
- - `shortopt`: An int representing the short option (e.g. 'h' for `-h`). If there is no short option, this should be a unique integer value greater than 255, typically starting from 1000, so that you can identify the option when handling.
-   - For example, using `1001` for a long-only option will allow you to identify it later by checking for `opt.getShortOpt() == 1001`.
- - `longopt`: A `const char*` representing the long option (e.g. "help" for `--help`). Use `nullptr` or an empty string if there is no long option.
- - `description`: A `const char*` providing a human-readable description of the option for help text.
- - `argRequirement`: An `XGetOpt::ArgumentRequirement` enum value indicating whether the option requires an argument, has an optional argument, or has no argument.
+ - `shortopt`: The short option character (e.g., 'h' for `-h`). Use a unique value outside the ASCII printable range (conventionally, integers numbered from 1000 onward) for options without a short form.
+ - `longopt`: The long option string (e.g., "help" for `--help`). Use an empty string for options without a long form.
+ - `description`: A brief description of the option, used in the help string.
+ - `argRequirement`: An enum value indicating whether the option requires an argument, has an optional argument, or has no argument.
+ - `argumentPlaceholder`: A string representing the placeholder for the argument in the help string (e.g., "file" for an output file).
+
+You can create an `Option` instance using the `XGETOPT_OPTION` macro, which simplifies the syntax.
+
 
 ### `OptionSequence` Class
 

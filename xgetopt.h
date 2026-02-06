@@ -18,69 +18,390 @@
 #error "xgetopt.h requires C++20 or later"
 #endif
 
-/**
- * ----------------------------------
- * THE NUCLEAR OPTION FOR USER CONFIG
- * ----------------------------------
- * Define XGETOPT_HELPSTRING_BUFFER_SIZE to a specific size (in bytes) before including this header
- * to override the default help string buffer size of 4096 bytes.
- *
- * Since the help string is generated at compile-time, it needs a fixed-size buffer.
- * If your help string exceeds the default size,
- *   or if it's much smaller and you want to shrink the resulting binary,
- * you can override the default size like so:
- *  #define XGETOPT_HELPSTRING_BUFFER_SIZE 8192
- *  #include "xgetopt.h"
- *
- * Just make sure to define it before including this header.
- * ----------------------------------
- *
- * NOTE: I would very much prefer if this buffer size were determined dynamically at compile-time based on the options provided.
- * In fact, all of the necessary information is available at compile-time to do so.
- * But it seems we just can't *get at* that information in a way that allows us to define a member array size based on it.
- * If there are any clever C++ developers who see a way around this, please contribute!
- */
-#ifndef XGETOPT_HELPSTRING_BUFFER_SIZE
-#define XGETOPT_HELPSTRING_BUFFER_SIZE 4096
-#endif
-
 #include <getopt.h>
-
-#include <string_view>
 #include <array>
 #include <vector>
+#include <string_view>
+#include <string>
 #include <optional>
-#include <cstdint>
-#include <stdexcept>
-#include <iostream>
-#include <algorithm>
 #include <cstddef>
+#include <cstdint>
+#include <type_traits>
+#include <algorithm>
+#include <concepts>
+#include <stdexcept>
 
 namespace XGetOpt {
+namespace Helpers {
 
+constexpr bool is_ws(char c) {
+	return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v';
+}
+
+/**
+ * @struct FixedString
+ * @brief A fixed-size string class for compile-time string manipulation
+ * 
+ * @tparam N The maximum size of the string (including NUL terminator)
+ */
+template<size_t N>
+struct FixedString {
+		std::array<char, N> data{};
+		size_t size = 0;
+		constexpr FixedString() = default;
+		constexpr FixedString(const char (&str)[N]) {
+			while (size + 1 < N && str[size] != '\0') {
+				data[size] = str[size];
+				size++;
+			}
+			// Ensure NUL termination when possible
+			if (size < N) data[size] = '\0';
+		}
+		constexpr ~FixedString() = default;
+		
+		constexpr const char* c_str() const {
+			return data.data();
+		}
+
+		constexpr void append(const char* str) {
+			size_t index = 0;
+			while (str[index] != '\0' && size < N) {
+				data[size++] = str[index++];
+			}
+		}
+		constexpr void append(char c) {
+			if (size < N) {
+				data[size++] = c;
+			}
+		}
+		constexpr void append(char c, size_t count) {
+			for (size_t i = 0; i < count && size < N; i++) {
+				data[size++] = c;
+			}
+		}
+		constexpr void append(std::string_view sv) {
+			for (size_t i = 0; i < sv.size() && size < N; i++) {
+				data[size++] = sv[i];
+			}
+		}
+		
+		constexpr std::string_view view() const {
+			return std::string_view(data.data(), size);
+		}
+
+		constexpr operator std::string_view() const {
+			return view();
+		}
+
+		constexpr size_t length() const {
+			return size;
+		}
+
+		constexpr std::optional<size_t> find(char c, size_t start = 0) const {
+			for (size_t i = start; i < size; i++) {
+				if (data[i] == c) {
+					return i;
+				}
+			}
+			return std::nullopt;
+		}
+
+		constexpr std::optional<size_t> find_first_of(const char* chars, size_t start = 0) const {
+			for (size_t i = start; i < size; i++) {
+				for (size_t j = 0; chars[j] != '\0'; j++) {
+					if (data[i] == chars[j]) {
+						return i;
+					}
+				}
+			}
+			return std::nullopt;
+		}
+
+		/**
+		 * @brief Get the next word from the string starting at position pos
+		 *
+		 * A 'word' is considered to be a sequence of non-whitespace characters.
+		 * 
+		 * @param pos The starting position to search from
+		 * @return constexpr std::string_view The next word found, or an empty string_view if none found
+		 */
+		constexpr std::string_view get_next_word(size_t pos) const {
+			size_t next_whitespace_position = find_first_of(" \t\n", pos).value_or(size);
+			return view().substr(pos, next_whitespace_position - pos);
+		}
+};
+
+// Deduction guide for FixedString
+template<size_t N>
+FixedString(const char (&)[N]) -> FixedString<N>;
+
+/**
+ * @struct TextView
+ * @brief A simple view over a text string
+ * 
+ */
+struct TextView {
+	const char* data = nullptr;
+	size_t len = 0;
+
+	constexpr size_t length() const { return len; }
+
+	constexpr const char* c_str() const { return data; } // ptr must be NUL-terminated if used as C-string
+
+	constexpr std::string_view view() const {
+		return (data && len) ? std::string_view(data, len) : std::string_view{};
+	}
+
+	constexpr operator std::string_view() const { return view(); }
+
+	constexpr std::string_view get_next_word(size_t pos) const {
+		auto sv = view();
+		if (pos >= sv.size()) return {};
+		size_t end = pos;
+		while (end < sv.size()) {
+			char ch = sv[end];
+			if (ch == ' ' || ch == '\t' || ch == '\n') break;
+			++end;
+		}
+		return sv.substr(pos, end - pos);
+	}
+};
+
+} // namespace Helpers
+
+/**
+ * @enum ArgumentRequirement
+ * @brief Specifies whether an option requires an argument, has an optional argument, or has no argument
+ * 
+ */
 enum ArgumentRequirement : uint8_t {
 	NoArgument = 0,
 	RequiredArgument = 1,
 	OptionalArgument = 2
 };
 
-// Compile-time view of available options
+/**
+ * @struct Option
+ * @brief Compile-time representation of a command-line option
+ * 
+ * @tparam ShortOpt The short option character (e.g., 'h' for -h, or a unique integer for long-only options)
+ * @tparam LongOpt The long option string (e.g., "help" for --help, or an empty string for short-only options)
+ * @tparam Description The description of the option for help string generation
+ * @tparam ArgReq The argument requirement (NoArgument, RequiredArgument, OptionalArgument)
+ * @tparam ArgumentPlaceholder The placeholder text for the argument in help strings (default: "arg")
+ */
+template<
+	int ShortOpt,
+	Helpers::FixedString LongOpt,
+	Helpers::FixedString Description,
+	ArgumentRequirement ArgReq,
+	Helpers::FixedString ArgumentPlaceholder = "arg">
 struct Option {
-	const int shortopt;
-	const char* longopt;
-	const char* description;
-	const ArgumentRequirement argRequirement;
-
-	constexpr Option(int s, const char* l, const char* d, ArgumentRequirement a)
-		: shortopt(s), longopt(l), description(d), argRequirement(a) {}
-	
-	constexpr Option(const Option&) = default;
-	constexpr Option(Option&&) noexcept = default;
-
-	Option() = delete;
+	static constexpr int shortopt = ShortOpt;
+	static constexpr auto longopt = LongOpt;
+	static constexpr auto description = Description;
+	static constexpr ArgumentRequirement argRequirement = ArgReq;
+	static constexpr auto argumentPlaceholder = ArgumentPlaceholder;
 };
 
-// Runtime view of a parsed option
+// Syntactic sugar (macro): looks like a function call but instantiates Option<...>
+#define _XGETOPT_OPTION_4(shortopt, longopt, description, req) \
+	(::XGetOpt::Option<(shortopt), \
+		::XGetOpt::Helpers::FixedString{longopt}, \
+		::XGetOpt::Helpers::FixedString{description}, \
+		(req)>{})
+
+#define _XGETOPT_OPTION_5(shortopt, longopt, description, req, argplaceholder) \
+	(::XGetOpt::Option<(shortopt), \
+		::XGetOpt::Helpers::FixedString{longopt}, \
+		::XGetOpt::Helpers::FixedString{description}, \
+		(req), \
+		::XGetOpt::Helpers::FixedString{argplaceholder}>{})
+
+// Macro dispatcher: If 5 args, use WITHPLACEHOLDER, else use NOPLACEHOLDER
+#define _XGETOPT_OPTION_SELECT(_1, _2, _3, _4, _5, NAME, ...) NAME
+
+#define XGETOPT_OPTION(...) \
+	_XGETOPT_OPTION_SELECT(__VA_ARGS__, _XGETOPT_OPTION_5, _XGETOPT_OPTION_4)(__VA_ARGS__)
+
+namespace Helpers {
+
+struct OptionView {
+	int shortopt = 0;
+	TextView longopt{};
+	TextView description{};
+	ArgumentRequirement argRequirement = ArgumentRequirement::NoArgument;
+	TextView argumentPlaceholder{};
+};
+
+template<typename T>
+concept option_like = requires(T t) {
+	{ t.shortopt } -> std::convertible_to<int>;
+	{ t.argRequirement } -> std::convertible_to<ArgumentRequirement>;
+	{ t.longopt.length() } -> std::convertible_to<size_t>;
+	{ t.description.length() } -> std::convertible_to<size_t>;
+	{ t.argumentPlaceholder.length() } -> std::convertible_to<size_t>;
+	{ t.description.get_next_word(size_t{}) } -> std::same_as<std::string_view>;
+};
+
+/**
+ * @brief Calculate the length of the option label for help string formatting
+ * 
+ * @tparam T The option-like type
+ * @param option The option to calculate the label length for
+ * @return constexpr size_t The length of the option label
+ */
+template<option_like T>
+constexpr size_t option_label_length(const T& option) {
+	/**
+	 * The option label format:
+	 *  1. -x, --longopt <arg>
+	 *  2. -x, --longopt[=arg]
+	 *  3. -x, --longopt
+	 *  4. -x <arg>
+	 *  5. -x[arg]
+	 *  6. -x
+	 *  7.     --longopt <arg>
+	 *  8.     --longopt[=arg]
+	 *  9.     --longopt
+	 *
+	 * Where <arg> is used for required arguments and [=arg] is used for optional arguments.
+	 * And where '-x' is the option's actual shortopt character,
+	 * '--longopt' is the option's actual longopt string,
+	 * and 'arg' is the option's argument placeholder string if provided, or 'arg' if not provided.
+	 */
+	size_t length = 2; // "-x" or equivalent whitespace if no shortopt
+
+	if (option.longopt.length() > 0) {
+		length += 2; // ", " or equivalent whitespace if no shortopt
+
+		length += 2 + option.longopt.length(); // For "--longopt"
+	}
+
+	switch (option.argRequirement) {
+		case XGetOpt::ArgumentRequirement::RequiredArgument:
+			length += 2 // " <"
+				+ option.argumentPlaceholder.length() + 1; // "arg>"
+			break;
+		case XGetOpt::ArgumentRequirement::OptionalArgument:
+			length += 1; // "["
+			if (option.longopt.length() > 0) {
+				length += 1; // "="
+			}
+			length += option.argumentPlaceholder.length() + 1; // "arg]"
+			break;
+		case XGetOpt::ArgumentRequirement::NoArgument:
+		default:
+			break;
+	}
+
+	//length += 1; // Null terminator
+
+	return length;
+}
+
+/**
+ * @brief Calculate the maximum option label length among a set of options
+ * 
+ * @tparam N The number of options
+ * @tparam T The option-like type
+ * @param options The array of options to calculate the maximum label length for
+ * @return constexpr size_t The maximum option label length
+ */
+template<size_t N, option_like T>
+constexpr size_t max_option_label_length(const std::array<T, N>& options) {
+	size_t max_length = 0;
+	for (size_t i = 0; i < N; i++) {
+		size_t length = option_label_length(options[i]);
+		if (length > max_length) {
+			max_length = length;
+		}
+	}
+	return max_length;
+}
+
+/**
+ * @brief Calculate the length of the help string for a set of options
+ * 
+ * @tparam N The number of options
+ * @tparam T The option-like type
+ * @param options The array of options to calculate the help string length for
+ * @return constexpr size_t The length of the help string
+ */
+template<size_t N, option_like T>
+constexpr size_t calculate_help_string_length(const std::array<T, N>& options) {
+	size_t total_length = 0;
+	const size_t max_label_length = max_option_label_length(options);
+
+	for (size_t i = 0; i < N; i++) {
+		size_t line_length = 2;
+		total_length += 2; // indentation
+		const size_t label_length = option_label_length(options[i]);
+		const size_t padding_amount = max_label_length - label_length;
+
+		total_length += label_length + padding_amount + 1;
+		line_length += label_length + padding_amount + 1;
+
+		const size_t line_limit = 80;
+		size_t pos = line_length;
+
+		auto desc = options[i].description.view();
+		size_t idx = 0;
+
+		while (idx < desc.size()) {
+			// Skip whitespace
+			while (idx < desc.size() && is_ws(desc[idx])) ++idx;
+			if (idx >= desc.size()) break;
+
+			// Find word end
+			size_t end = idx;
+			while (end < desc.size() && !is_ws(desc[end])) ++end;
+
+			const size_t word_len = end - idx;
+
+			// Wrap if the word doesn't fit on this line (and we're not at the start of the desc column)
+			const size_t desc_col = max_label_length + 3;
+			if (pos + word_len > line_limit && pos > desc_col) {
+				total_length += 1;              // '\n'
+				total_length += desc_col;       // indentation to description column
+				pos = desc_col;
+			}
+
+			total_length += word_len;
+			pos += word_len;
+
+			// Look ahead: is there another word?
+			size_t next = end;
+			while (next < desc.size() && is_ws(desc[next])) ++next;
+			if (next < desc.size()) {
+				// Add a single separating space if it fits, else wrap
+				if (pos + 1 > line_limit) {
+					total_length += 1;
+					total_length += desc_col;
+					pos = desc_col;
+				} else {
+					total_length += 1;
+					pos += 1;
+				}
+			}
+
+			idx = end;
+		}
+
+		total_length += 1; // newline after each option
+	}
+
+	return total_length + 1; // trailing '\0'
+}
+
+} // namespace Helpers
+
+
+/**
+ * @class ParsedOption
+ * @brief Represents a parsed command-line option and its associated argument (if any)
+ * 
+ */
 class ParsedOption {
 	private:
 		int shortopt;
@@ -89,39 +410,24 @@ class ParsedOption {
 		ParsedOption(int s, std::optional<std::string_view> arg)
 			: shortopt(s), argument(arg) {}
 		
-		/**
-		 * @brief Get the shortopt of this parsed option (or the unique integer identifier for long-only options)
-		 * 
-		 * @return int The shortopt character or unique integer identifier
-		 */
 		int getShortOpt() const {
 			return shortopt;
 		}
 
-		/**
-		 * @brief Check if this option was given with an argument
-		 * 
-		 * @return true if an argument was provided
-		 * @return false if no argument was provided
-		 */
 		bool hasArgument() const {
 			return argument.has_value();
 		}
 
-		/**
-		 * @brief Get the argument provided for this option
-		 * 
-		 * @return std::string_view The argument string
-		 * @throws std::runtime_error if no argument was provided (you should check hasArgument() first if the argument is optional)
-		 */
 		std::string_view getArgument() const {
-			if (!argument.has_value()) {
-				throw std::runtime_error("No argument present for this option");
-			}
-			return argument.value();
+			return argument.value_or(std::string_view{});
 		}
 };
 
+/**
+ * @class OptionSequence
+ * @brief Represents a sequence of parsed options and non-option arguments
+ * 
+ */
 class OptionSequence {
 	private:
 		std::vector<ParsedOption> options;
@@ -130,7 +436,6 @@ class OptionSequence {
 		void addOption(const ParsedOption& opt) {
 			options.push_back(opt);
 		}
-
 		void addNonOptionArgument(std::string_view arg) {
 			nonOptionArguments.push_back(arg);
 		}
@@ -138,29 +443,24 @@ class OptionSequence {
 		auto begin() const {
 			return options.begin();
 		}
-
 		auto end() const {
 			return options.end();
 		}
-
 		size_t size() const {
 			return options.size();
 		}
-
 		bool empty() const {
 			return options.empty();
 		}
-
 		const ParsedOption& operator[](size_t index) const {
 			return options[index];
 		}
-
 		const ParsedOption& at(size_t index) const {
 			return options.at(index);
 		}
 
 		/**
-		 * @brief Check whether a specific option was provided
+		 * @brief Check if an option with the given shortopt was provided
 		 * 
 		 * @param shortopt The shortopt character or unique integer identifier to check for
 		 * @return true if the option was provided
@@ -183,147 +483,36 @@ class OptionSequence {
 		}
 };
 
-template<size_t N>
-struct FixedString {
-	std::array<char, N> data{};
-	size_t size = 0;
-
-	constexpr void append(std::string_view str) {
-		if (size + str.size() > N) {
-			// If this happens during constant evaluation, compilation fails (good).
-			throw std::out_of_range("FixedString capacity exceeded");
-		}
-		for (char c : str) {
-			data[size++] = c;
-		}
-	}
-
-	constexpr void append(char c, size_t count = 1) {
-		if (size + count > N) {
-			throw std::out_of_range("FixedString capacity exceeded");
-		}
-		for (size_t i = 0; i < count; i++) {
-			data[size++] = c;
-		}
-	}
-
-	constexpr std::string_view view() const {
-		return std::string_view(data.data(), size);
-	}
-
-	friend std::ostream& operator<<(std::ostream& os, const FixedString& fs) {
-		return os.write(fs.data.data(), fs.size);
-	}
-};
-
-// Helper function to figure a string's length at compile-time
-constexpr size_t string_length(const char* str) {
-	size_t length = 0;
-	while (str && str[length] != '\0') {
-		length++;
-	}
-	return length;
-}
-
-constexpr size_t option_label_length(const Option& option) {
-	size_t length = 0;
-
-	// Check if the shortopt is within printable ASCII range
-	if (option.shortopt >= 33 && option.shortopt <= 126) {
-		length += 2; // For "-x"
-		if (option.longopt && option.longopt[0] != '\0') {
-			length += 2; // For ", "
-		}
-	} else {
-		// No shortopt, account for spaces
-		length += 4; // For "    "
-	}
-
-	if (option.longopt && option.longopt[0] != '\0') {
-		length += 2 + string_length(option.longopt); // For "--longopt"
-	}
-
-	switch (option.argRequirement) {
-		case XGetOpt::ArgumentRequirement::RequiredArgument:
-		case XGetOpt::ArgumentRequirement::OptionalArgument:
-			length += 6; // For " <arg>" or " [arg]"
-			break;
-		case XGetOpt::ArgumentRequirement::NoArgument:
-		default:
-			break;
-	}
-
-	return length;
-}
-
-template<size_t N>
-constexpr size_t max_option_label_length(const std::array<Option, N>& options) {
-	size_t max_length = 0;
-	for (size_t i = 0; i < N; i++) {
-		size_t length = option_label_length(options[i]);
-		if (length > max_length) {
-			max_length = length;
-		}
-	}
-
-	return max_length;
-}
-
-template<size_t N>
-constexpr size_t calculate_help_string_length(const std::array<Option, N>& options) {
-	size_t total_length = 0;
-	const size_t max_label_length = max_option_label_length(options);
-
-	for (size_t i = 0; i < N; i++) {
-		total_length += 2; // For initial whitespace indentation
-		const size_t label_length = option_label_length(options[i]);
-
-		// How much padding is required?
-		const size_t padding_amount = max_label_length - label_length;
-
-		// label + padding + space-before-desc + desc + newline
-		total_length += label_length + padding_amount + 1 + string_length(options[i].description) + 1;
-	}
-
-	// +1 for the trailing '\0'
-	return total_length + 1;
-}
-
-template<size_t N>
-using OptionArray = std::array<Option, N>;
-
-template<size_t N>
+/**
+ * @class OptionParser
+ * @brief Parses command-line arguments based on a set of defined options
+ * 
+ * @tparam Options The variadic list of option definitions
+ */
+template<Helpers::option_like... Options>
 class OptionParser {
 	private:
-		const OptionArray<N> options;
-		const std::array<char, 3*N + 1> short_options = build_short_options_(options);
-		const std::array<struct option, N + 1> long_options = build_long_options_(options);
-		const FixedString<XGETOPT_HELPSTRING_BUFFER_SIZE> help_string
-			= generateHelpString<XGETOPT_HELPSTRING_BUFFER_SIZE>(options);
+		static constexpr size_t N = sizeof...(Options);
+		using OptionArray = std::array<Helpers::OptionView, N>;
 
-		constexpr std::array<struct option, N + 1> build_long_options_(const OptionArray<N>& opts) {
-			std::array<struct option, N + 1> long_opts{};
+		static constexpr OptionArray options = OptionArray{{
+			Helpers::OptionView{
+				Options::shortopt,
+				Helpers::TextView{ Options::longopt.c_str(), Options::longopt.length() },
+				Helpers::TextView{ Options::description.c_str(), Options::description.length() },
+				Options::argRequirement,
+				Helpers::TextView{ Options::argumentPlaceholder.c_str(), Options::argumentPlaceholder.length() }
+			}...
+		}};
 
-			for (size_t i = 0; i < N; i++) {
-				long_opts[i].name = (opts[i].longopt && opts[i].longopt[0] != '\0')
-					? opts[i].longopt
-					: nullptr;
-				long_opts[i].has_arg = static_cast<int>(opts[i].argRequirement);
-				long_opts[i].flag = nullptr;
-				long_opts[i].val = opts[i].shortopt;
-			}
-
-			// Null-terminate the array
-			long_opts[N] = {nullptr, 0, nullptr, 0};
-			return long_opts;
-		}
-
-		constexpr std::array<char, 3*N + 1> build_short_options_(const OptionArray<N>& opts) {
+		static constexpr size_t help_string_length = Helpers::calculate_help_string_length<N>(options);
+		
+		static constexpr std::array<char, 3*N + 2> build_short_options_(const OptionArray& opts) {
 			size_t short_opt_index = 0;
-			std::array<char, 3*N + 1> short_opts{};
+			std::array<char, 3*N + 2> short_opts{};
 
 			// GNU getopt extension: RETURN_IN_ORDER
-			// Non-option arguments are returned as character code 1, with optarg set to the argument string.
+			// Non-option arguments are returned as character code 1, with optarg set to the argument.
 			short_opts[short_opt_index++] = '-';
 
 			for (size_t i = 0; i < N; i++) {
@@ -350,27 +539,38 @@ class OptionParser {
 			return short_opts;
 		}
 
-		/**
-		* @brief Get a compile-time generated help string detailing all available options and their descriptions
-		* 
-		* @tparam MaxSize The maximum size of the help string to generate
-		* @param options The array of options to generate the help string for
-		* @return constexpr XGetOpt::FixedString<MaxSize> The generated help string
-		*/
-		template<size_t MaxSize>
-		static constexpr auto generateHelpString(const OptionArray<N>& options) {
-			FixedString<MaxSize> help_string;
+		static constexpr std::array<struct option, N + 1> build_long_options_(const OptionArray& opts) {
+			std::array<struct option, N + 1> long_opts{};
 
-			// NOTE: not constexpr (depends on function parameter)
-			const size_t max_label_length = max_option_label_length(options);
+			for (size_t i = 0; i < N; i++) {
+				long_opts[i].name = (opts[i].longopt.length() > 0)
+					? opts[i].longopt.c_str()
+					: nullptr;
+				long_opts[i].has_arg = static_cast<int>(opts[i].argRequirement);
+				long_opts[i].flag = nullptr;
+				long_opts[i].val = opts[i].shortopt;
+			}
+
+			// Null-terminate the array (GNU getopt expects a sentinel)
+			long_opts[N] = {nullptr, 0, nullptr, 0};
+			return long_opts;
+		}
+
+		static constexpr std::array<char, 3*N + 2> short_options = build_short_options_(options);
+		static constexpr std::array<struct option, N + 1> long_options = build_long_options_(options);
+
+		static constexpr Helpers::FixedString<help_string_length> generateHelpString(const OptionArray& options) {
+			Helpers::FixedString<help_string_length> help_string;
+			const size_t max_label_length = Helpers::max_option_label_length<N>(options);
 
 			for (size_t i = 0; i < N; i++) {
 				help_string.append("  ");
 
+				// First: write the '-x, --longopt <arg>' part
 				if (options[i].shortopt >= 33 && options[i].shortopt <= 126) {
 					help_string.append('-');
 					help_string.append(static_cast<char>(options[i].shortopt));
-					if (options[i].longopt && options[i].longopt[0] != '\0') {
+					if (options[i].longopt.length() > 0) {
 						help_string.append(", ");
 					}
 				} else {
@@ -378,88 +578,125 @@ class OptionParser {
 					help_string.append(' ', 4); // The space that would've been used by "-x, "
 				}
 
-				if (options[i].longopt && options[i].longopt[0] != '\0') {
+				if (options[i].longopt.length() > 0) {
 					help_string.append("--");
 					help_string.append(options[i].longopt);
 				}
 
 				switch (options[i].argRequirement) {
 					case XGetOpt::ArgumentRequirement::RequiredArgument:
-						help_string.append(" <arg>");
+						help_string.append(" <");
+						help_string.append(options[i].argumentPlaceholder);
+						help_string.append(">");
 						break;
 					case XGetOpt::ArgumentRequirement::OptionalArgument:
-						help_string.append(" [arg]");
+						// Shortopt-only? "[arg]"
+						// Longopt (with or without shortopt)? "[=arg]"
+						help_string.append("[");
+						if (options[i].longopt.length() > 0) {
+							help_string.append("=");
+						}
+						help_string.append(options[i].argumentPlaceholder);
+						help_string.append("]");
 						break;
 					case XGetOpt::ArgumentRequirement::NoArgument:
 					default:
 						break;
 				}
 
+				// Second: write the option description
+
 				const size_t label_length = option_label_length(options[i]);
 				const size_t padding_amount = max_label_length - label_length;
 				help_string.append(' ', padding_amount + 1);
-				help_string.append(options[i].description);
+
+				const size_t line_limit = 80;
+				const size_t desc_col = max_label_length + 3;
+				size_t pos = 2 + max_label_length + 1;
+
+				auto desc = options[i].description.view();
+				size_t idx = 0;
+
+				while (idx < desc.size()) {
+					while (idx < desc.size() && Helpers::is_ws(desc[idx])) ++idx;
+					if (idx >= desc.size()) break;
+
+					size_t end = idx;
+					while (end < desc.size() && !Helpers::is_ws(desc[end])) ++end;
+
+					std::string_view word = desc.substr(idx, end - idx);
+
+					if (pos + word.size() > line_limit && pos > desc_col) {
+						help_string.append('\n');
+						help_string.append(' ', desc_col);
+						pos = desc_col;
+					}
+
+					help_string.append(word);
+					pos += word.size();
+
+					size_t next = end;
+					while (next < desc.size() && Helpers::is_ws(desc[next])) ++next;
+					if (next < desc.size()) {
+						if (pos + 1 > line_limit) {
+							help_string.append('\n');
+							help_string.append(' ', desc_col);
+							pos = desc_col;
+						} else {
+							help_string.append(' ');
+							pos += 1;
+						}
+					}
+
+					idx = end;
+				}
+
 				help_string.append('\n');
 			}
 
-			// No need to append '\0' (ostream<< and string_view don't require it)
 			return help_string;
 		}
-	
+
+		static constexpr Helpers::FixedString<help_string_length> help_string
+			= generateHelpString(options);
 	public:
-		explicit constexpr OptionParser(OptionArray<N> opts) : options(opts) {}
-
-		// Variadic constructor
-		template<typename... Options>
-		explicit constexpr OptionParser(Options... opts) : options{opts...} {}
-
-		OptionParser() = delete;
-
 		/**
-			* @brief Get the help string for this option parser
-			*
-			* The help string details each available option, its short and long forms,
-			* whether it requires an argument, whether it accepts an optional argument, and its description.
-			*
-			* The string is generated at compile-time based on the options defined in the parser.
-			* 
-			* @return std::string_view The help string
-			*/
-		std::string_view getHelpString() const {
+		 * @brief Get the compile-time generated help string
+		 * 
+		 * @return constexpr std::string_view The help string for this option parser detailing all options
+		 */
+		constexpr std::string_view getHelpString() const {
 			return help_string.view();
 		}
 
 		/**
-		* @brief Parse command-line arguments according to the defined options
-		* 
-		* @param argc The number of command-line arguments
-		* @param argv The array of command-line argument strings
-		* @return OptionSequence The parsed options and their values
-		*/
+		 * @brief Parse command-line arguments according to the defined options
+		 * 
+		 * @param argc The argument count
+		 * @param argv The argument vector
+		 * @return OptionSequence The sequence of parsed options and non-option arguments
+		 */
 		OptionSequence parse(int argc, char* argv[]) const {
 			OptionSequence parsed_options;
 
-			// Don't let getopt print messages.
-			opterr = 0;
+			opterr = 0; // Don't let getopt print messages.
+			optind = 1; // Reset in case parse() is called more than once in a process.
 
-			// Reset in case parse() is called more than once in a process.
-			optind = 1;
-
-			auto find_by_short = [&](int s) -> const Option* {
+			auto find_by_short = [&](int s) -> const auto* {
 				for (size_t i = 0; i < N; i++) {
 					if (options[i].shortopt == s) return &options[i];
 				}
-				return nullptr;
+				return static_cast<const Helpers::OptionView*>(nullptr);
 			};
 
-			auto find_by_long = [&](std::string_view name) -> const Option* {
+			auto find_by_long = [&](std::string_view name) -> const auto* {
 				for (size_t i = 0; i < N; i++) {
-					if (options[i].longopt && options[i].longopt[0] != '\0'
-						&& name == std::string_view(options[i].longopt)) {
+					if (options[i].longopt.length() > 0
+						&& name == std::string_view(options[i].longopt.data, options[i].longopt.length())) {
 						return &options[i];
 					}
 				}
-				return nullptr;
+				return static_cast<const Helpers::OptionView*>(nullptr);
 			};
 
 			auto token_to_long_name = [&](const char* tok) -> std::string_view {
@@ -476,7 +713,6 @@ class OptionParser {
 			int opt;
 			int longindex = 0;
 			while ((opt = getopt_long(argc, argv, short_options.data(), long_options.data(), &longindex)) != -1) {
-				// Non-option argument (in-order)
 				if (opt == 1) {
 					if (optarg != nullptr) {
 						parsed_options.addNonOptionArgument(std::string_view(optarg));
@@ -484,38 +720,35 @@ class OptionParser {
 					continue;
 				}
 
-				// Error from getopt_long: unknown option OR missing required argument
 				if (opt == '?') {
-					// Try to classify missing-argument vs unknown.
-					// For short options missing arg: optopt is set to the option character.
+					// Either unknown option or missing required argument
+					// For shortopts missing arg: optopt is set to the offending option character.
 					if (optopt != 0) {
-						if (const Option* o = find_by_short(optopt)) {
-							if (o->argRequirement == XGetOpt::ArgumentRequirement::RequiredArgument) {
-								std::string option_name;
-								if (optopt >= 33 && optopt <= 126) {
-									option_name += '-';
-									option_name += static_cast<char>(optopt);
-								} else {
-									option_name = std::string(o->longopt ? o->longopt : "???");
-								}
-
-								throw std::runtime_error(std::string("Missing required argument for option: ")
-									+ option_name);
+						const auto* o = find_by_short(optopt);
+						if (o && o->argRequirement == XGetOpt::ArgumentRequirement::RequiredArgument) {
+							std::string option_name;
+							if (optopt >= 33 && optopt <= 126) {
+								option_name += '-';
+								option_name += static_cast<char>(optopt);
+							} else {
+								option_name = std::string(o->longopt.length() > 0
+									? o->longopt.data
+									: "???");
 							}
+
+							throw std::runtime_error(std::string("Missing required argument for option: ")
+								+ option_name);
 						}
 					}
 
 					// For long options missing arg: argv[optind-1] is typically the option token.
-					const char* culprit_tok =
-						(optind > 0 && optind <= argc) ? argv[optind - 1] : nullptr;
-
+					const char* culprit_tok = (optind > 0 && optind <= argc) ? argv[optind - 1] : nullptr;
 					const std::string_view long_name = token_to_long_name(culprit_tok);
 					if (!long_name.empty()) {
-						if (const Option* o = find_by_long(long_name)) {
-							if (o->argRequirement == XGetOpt::ArgumentRequirement::RequiredArgument) {
-								throw std::runtime_error(std::string("Missing required argument for option: --")
-									+ std::string(long_name));
-							}
+						const auto* o = find_by_long(long_name);
+						if (o && o->argRequirement == XGetOpt::ArgumentRequirement::RequiredArgument) {
+							throw std::runtime_error(std::string("Missing required argument for option: --")
+								+ std::string(long_name));
 						}
 					}
 
@@ -523,64 +756,32 @@ class OptionParser {
 					if (culprit_tok) {
 						throw std::runtime_error(std::string("Unknown option: ") + culprit_tok);
 					}
+
+					// Last resort:
 					throw std::runtime_error("Unknown option");
 				}
 
 				std::optional<std::string_view> argument;
-
-				// Determine if an argument is present
 				if (optarg != NULL) {
 					argument = std::string_view(optarg);
-				} else {
-					// Check if the option accepts an optional argument
-					// GNU Getopt's behavior is maybe a bit odd, or unexpected at least.
-					// If an option is defined to take an optional argument, then either:
-					// 1) The argument is given as part of the same argv token, e.g. "--opt=arg" or "-oarg"
-					//    In this case, getopt sets optarg = "arg" as expected.
-					// 2) No argument is given, in which case optarg = NULL, again, as expected.
-					// 3) The argument is given as **the next** argv token, e.g. "--opt arg" or "-o arg".
-					//    In this case, getopt sets optarg = NULL, but keeps the next argv token intact.
-					//    This is a bit counterintuitive and needs to be handled specially here.
-					for (size_t i = 0; i < N; i++) {
-						// First, we check if this option is expected to handle an optional argument.
-						if (options[i].shortopt == opt
-							&& options[i].argRequirement == XGetOpt::ArgumentRequirement::OptionalArgument
-						) {
-							// If it's meant to handle an optional argument, let's process it
-							bool has_optional_argument = [&]() {
-								// CHECK: optarg not set, we're not at the end of options, and the next one doesn't start with '-'
-								if (optarg == NULL && optind < argc && argv[optind][0] != '-') {
-									// If so, set optarg = the next argument,
-									// Increment the opt-index to tell getopt to skip the next one since we've already handled it
-									// And evaluate to true (has_optional_argument = true)
-									optarg = argv[optind];
-									optind++;
-									return true;
-								} else {
-									// Otherwise, evaluate to true if optarg is set, false if not
-									return (optarg != NULL);
-								}
-							}();
-							// If an optional argument is present, set it
-							if (has_optional_argument) argument = std::string_view(optarg);
-							break;
-						}
-					}
 				}
 
 				parsed_options.addOption(ParsedOption(opt, argument));
 			}
-
 			return parsed_options;
 		}
 };
 
-// Deduction guide for OptionParser
-template<typename... Options>
-OptionParser(Options...) -> OptionParser<sizeof...(Options)>;
+template<Helpers::option_like... Opts>
+[[nodiscard]] constexpr OptionParser<Opts...> make_option_parser(Opts... opts) {
+	return OptionParser<Opts...>{};
+}
+
+// More macro sugar:
+//  constexpr auto parser = XGETOPT_PARSER(XGETOPT_OPTION(...), XGETOPT_OPTION(...), ...);
+#define XGETOPT_PARSER(...) \
+	(::XGetOpt::make_option_parser(__VA_ARGS__))
 
 } // namespace XGetOpt
-
-#undef XGETOPT_HELPSTRING_BUFFER_SIZE
 
 #endif // XGETOPT_H_
