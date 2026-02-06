@@ -84,6 +84,55 @@ The generated help string looks like this:
 
 And is fully generated at compile-time.
 
+### Subcommand Pattern Example
+
+```cpp
+#include "xgetopt.h"
+#include <iostream>
+
+int main(int argc, char* argv[]) {
+	constexpr auto parser = XGETOPT_PARSER(
+		XGETOPT_OPTION('h', "help", "Display this help message", XGetOpt::NoArgument),
+		XGETOPT_OPTION('o', "output", "Specify output file", XGetOpt::RequiredArgument, "file"),
+		XGETOPT_OPTION('p', "parameter", "Specify optional parameter", XGetOpt::OptionalArgument)
+	);
+
+	constexpr auto subCommandParser = XGETOPT_PARSER(
+		XGETOPT_OPTION('a', "alpha", "Alpha option for subcommand", XGetOpt::NoArgument),
+		XGETOPT_OPTION('b', "beta", "Beta option for subcommand", XGetOpt::RequiredArgument, "value"),
+		XGETOPT_OPTION('h', "help", "Display this help message for subcommand", XGetOpt::NoArgument)
+	);
+
+	try {
+		// The first non-option argument is treated as the subcommand name
+		auto [options, remainder] = parser.parse_until<XGetOpt::BeforeFirstNonOptionArgument>(argc, argv);
+
+		for (const auto& opt : options) {
+			// Base program options processing...
+		}
+
+		if (remainder.argc > 0) {
+			std::string_view subcommandName = remainder.argv[0];
+
+			if (subcommandName == "subcmd") {
+				auto subOptions = subCommandParser.parse(remainder.argc, remainder.argv);
+				for (const auto& opt : subOptions) {
+					// Subcommand options processing...
+				}
+			} else {
+				std::cerr << "Unknown subcommand: " << subcommandName << std::endl;
+				return 1;
+			}
+		}
+	} catch (const std::exception& e) {
+		std::cerr << e.what() << std::endl;
+		return 1;
+	}
+}
+```
+
+In the above example, the first non-option argument is treated as the subcommand name, and the remaining arguments are parsed using a separate parser for that subcommand.
+
 ## API Reference
 
 [See the wiki](../../../../../../rail5/xgetopt/wiki/) for complete documentation and examples.
