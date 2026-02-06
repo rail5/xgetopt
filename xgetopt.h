@@ -813,6 +813,18 @@ class OptionParser {
 				parsed_options.addOption(ParsedOption(opt, argument));
 			}
 
+			// GNU getopt treats `--` as an end-of-options marker and returns -1 without
+			// yielding the remaining arguments via RETURN_IN_ORDER.
+			// We still want those remaining tokens to be treated as non-option arguments.
+			if constexpr (parseUntil == AllOptions || parseUntil == BeforeFirstError) {
+				if (remainder_start < 0) {
+					for (int i = optind; i < argc; i++) {
+						parsed_options.addNonOptionArgument(std::string_view(argv[i]));
+					}
+					optind = argc;
+				}
+			}
+
 			const int start = (remainder_start >= 0) ? remainder_start : optind;
 			unparsed_options.argc = argc - start;
 			unparsed_options.argv = &argv[start];
@@ -861,7 +873,7 @@ class OptionParser {
 };
 
 template<Helpers::option_like... Opts>
-[[nodiscard]] constexpr OptionParser<Opts...> make_option_parser(Opts... opts) {
+[[nodiscard]] constexpr OptionParser<Opts...> make_option_parser(Opts... /*opts*/) {
 	return OptionParser<Opts...>{};
 }
 
