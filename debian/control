@@ -6,9 +6,6 @@ Standards-Version: 3.9.3
 Section: utils
 
 Package: xgetopt-dev
-Version: 0.9
-License: GPL-2+
-Vendor: rail5 <andrew@rail5.org>
 Priority: optional
 Architecture: all
 Depends: ${misc:Depends}
