@@ -2,22 +2,23 @@
 
 XGetOpt is a simple, **header-only, constexpr-first** C++20 library for parsing command-line options.
 
-Underneath, it is actually just a wrapper around GNU `getopt_long` with a more convenient C++ interface.
-
 [See the wiki](../../../../../../rail5/xgetopt/wiki/) for complete documentation and examples.
 
 ## Features
 
- - Fully constexpr, compile-time "help string" generation
+ - Fully constexpr, **compile-time help-string generation**
  - Fully constexpr option definitions and metadata
+ - **First-class** support for **non-option arguments**
+ - Support for **early-stop parsing** via `parse_until<StopCondition>()`
+   - Stop before/after first non-option argument, or before first error
+   - Remainder of unparsed arguments provided for further processing
  - Supports short options (e.g. `-a`), and long options (e.g. `--alpha`)
    - Options may have both short and long forms, or only one or the other
  - Supports options with no argument, required argument, and optional argument
- - Out-of-the-box support for non-option arguments
- - Supports early-stop parsing via `parse_until<StopCondition>()`
-   - Stop before/after first non-option argument, or before first error
-   - Remainder of unparsed arguments provided for further processing
  - Classic option clustering (e.g. `-abc` is equivalent to `-a -b -c`)
+ - Preservation of GNU `getopt` semantics
+   - Matches user expectations
+   - XGetOpt is in fact a wrapper around `getopt_long`
 
 ## Example Usage
 
