@@ -1,3 +1,21 @@
+xgetopt (0.11.0) unstable; urgency=medium
+
+  * Refactor:
+    Implemented compile-time calculation of help string buffer size.
+    Use FixedString and OptionView for constexpr string and option handling.
+    Removed legacy Option and FixedString implementations.
+    Improved internal option label formatting logic.
+  * Added support for argument placeholders in help output (e.g., <file> for
+    output).
+  * Improved help string formatting:
+    Required arguments now display as <placeholder>.
+    Optional arguments for long options display as [=placeholder], matching GNU
+    conventions.
+    Descriptions now wrap at 80 characters for better readability.
+  * No breaking changes to runtime parsing behavior.
+
+ -- rail5 <andrew@rail5.org>  Fri, 06 Feb 2026 14:31:15 +0800
+
 xgetopt (0.10.0) unstable; urgency=medium
 
   * Interface changed slightly,
