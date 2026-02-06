@@ -30,6 +30,7 @@
 #include <algorithm>
 #include <concepts>
 #include <stdexcept>
+#include <utility>
 
 namespace XGetOpt {
 namespace Helpers {
@@ -483,12 +484,34 @@ class OptionSequence {
 		}
 };
 
+/**
+ * @enum StopCondition
+ * @brief Specifies when to stop parsing options
+ *
+ * An explanation of each:
+ *  - AllOptions:
+ *      Parse all options until the end of the argument list
+ *
+ *  - BeforeFirstNonOptionArgument:
+ *      Stop parsing when the first non-option argument is encountered
+ *      The non-option argument and any subsequent arguments are left unparsed
+ *
+ *  - AfterFirstNonOptionArgument:
+ *      Stop parsing after the first non-option argument is encountered
+ *      The first non-option argument is included in the parsed results,
+ *      but any subsequent arguments are left unparsed
+ *
+ *  - BeforeFirstError:
+ *     Stop parsing when the first error is encountered (unknown option or missing required argument)
+ *     The offending option is not included in the parsed results,
+ *     and it as well as any subsequent arguments are left unparsed
+ * 
+ */
 enum StopCondition {
 	AllOptions,
-	FirstNonOptionArgument,
-	FirstMissingArgumentError,
-	FirstUnrecognizedOptionError,
-	FirstError
+	BeforeFirstNonOptionArgument,
+	AfterFirstNonOptionArgument,
+	BeforeFirstError
 };
 
 struct OptionRemainder {
@@ -678,13 +701,12 @@ class OptionParser {
 		template <StopCondition parseUntil>
 		std::pair<OptionSequence, OptionRemainder> parse_impl(int argc, char* argv[]) const {
 			OptionSequence parsed_options;
-
-			OptionRemainder unparsed_options;
-			unparsed_options.argc = argc;
-			unparsed_options.argv = argv;
+			OptionRemainder unparsed_options{argc, argv};
 
 			opterr = 0; // Don't let getopt print messages.
 			optind = 1; // Reset in case parse() is called more than once in a process.
+
+			int remainder_start = -1;
 
 			auto find_by_short = [&](int s) -> const auto* {
 				for (size_t i = 0; i < N; i++) {
@@ -714,20 +736,41 @@ class OptionParser {
 				return sv;
 			};
 
-			int opt;
 			int longindex = 0;
-			while ((opt = getopt_long(argc, argv, short_options.data(), long_options.data(), &longindex)) != -1) {
+
+			for (;;) {
+				const int token_index = optind; // argv index examined by this call
+				const int opt = getopt_long(argc, argv, short_options.data(), long_options.data(), &longindex);
+				if (opt == -1) break;
+
 				if (opt == 1) {
+					// RETURN_IN_ORDER: optarg is the non-option, from argv[token_index]
 					if (optarg != nullptr) {
+						if constexpr (parseUntil == BeforeFirstNonOptionArgument) {
+							remainder_start = token_index; // include the non-option in remainder
+							break;
+						}
+
 						parsed_options.addNonOptionArgument(std::string_view(optarg));
-						if constexpr (parseUntil == FirstNonOptionArgument) break;
+
+						if constexpr (parseUntil == AfterFirstNonOptionArgument) {
+							// optind is already positioned after this non-option
+							break;
+						}
 					}
 					continue;
 				}
 
 				if (opt == '?') {
-					// Either unknown option or missing required argument
-					if (parseUntil == FirstError) break;
+					if constexpr (parseUntil == BeforeFirstError) {
+						remainder_start = token_index; // include offending token in remainder
+						break;
+					}
+
+					// Use token_index for the culprit token deterministically:
+					const char* culprit_tok =
+						(token_index >= 0 && token_index < argc) ? argv[token_index] : nullptr;
+
 					// For shortopts missing arg: optopt is set to the offending option character.
 					if (optopt != 0) {
 						const auto* o = find_by_short(optopt);
@@ -741,26 +784,22 @@ class OptionParser {
 									? o->longopt.data
 									: "???");
 							}
-							if constexpr (parseUntil == FirstMissingArgumentError) break;
 							throw std::runtime_error(std::string("Missing required argument for option: ")
 								+ option_name);
 						}
 					}
 
 					// For long options missing arg: argv[optind-1] is typically the option token.
-					const char* culprit_tok = (optind > 0 && optind <= argc) ? argv[optind - 1] : nullptr;
 					const std::string_view long_name = token_to_long_name(culprit_tok);
 					if (!long_name.empty()) {
 						const auto* o = find_by_long(long_name);
 						if (o && o->argRequirement == XGetOpt::ArgumentRequirement::RequiredArgument) {
-							if constexpr (parseUntil == FirstMissingArgumentError) break;
 							throw std::runtime_error(std::string("Missing required argument for option: --")
 								+ std::string(long_name));
 						}
 					}
 
 					// Otherwise: unknown option
-					if constexpr (parseUntil == FirstUnrecognizedOptionError) break;
 					if (culprit_tok) {
 						throw std::runtime_error(std::string("Unknown option: ") + culprit_tok);
 					}
@@ -770,16 +809,14 @@ class OptionParser {
 				}
 
 				std::optional<std::string_view> argument;
-				if (optarg != NULL) {
-					argument = std::string_view(optarg);
-				}
-
+				if (optarg != nullptr) argument = std::string_view(optarg);
 				parsed_options.addOption(ParsedOption(opt, argument));
 			}
 
-			unparsed_options.argc = argc - optind;
-			unparsed_options.argv = &argv[optind];
-			return std::make_pair(parsed_options, unparsed_options);
+			const int start = (remainder_start >= 0) ? remainder_start : optind;
+			unparsed_options.argc = argc - start;
+			unparsed_options.argv = &argv[start];
+			return {parsed_options, unparsed_options};
 		}
 	public:
 		/**
