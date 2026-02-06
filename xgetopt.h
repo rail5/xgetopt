@@ -483,6 +483,19 @@ class OptionSequence {
 		}
 };
 
+enum StopCondition {
+	AllOptions,
+	FirstNonOptionArgument,
+	FirstMissingArgumentError,
+	FirstUnrecognizedOptionError,
+	FirstError
+};
+
+struct OptionRemainder {
+	int argc;
+	char** argv;
+};
+
 /**
  * @class OptionParser
  * @brief Parses command-line arguments based on a set of defined options
@@ -661,29 +674,14 @@ class OptionParser {
 
 		static constexpr Helpers::FixedString<help_string_length> help_string
 			= generateHelpString(options);
-	public:
-		/**
-		 * @brief Get the compile-time generated help string
-		 * 
-		 * @return constexpr std::string_view The help string for this option parser detailing all options
-		 */
-		constexpr std::string_view getHelpString() const {
-			return help_string.view();
-		}
 
-		constexpr const OptionArray& getOptions() const {
-			return options;
-		}
-
-		/**
-		 * @brief Parse command-line arguments according to the defined options
-		 * 
-		 * @param argc The argument count
-		 * @param argv The argument vector
-		 * @return OptionSequence The sequence of parsed options and non-option arguments
-		 */
-		OptionSequence parse(int argc, char* argv[]) const {
+		template <StopCondition parseUntil>
+		std::pair<OptionSequence, OptionRemainder> parse_impl(int argc, char* argv[]) const {
 			OptionSequence parsed_options;
+
+			OptionRemainder unparsed_options;
+			unparsed_options.argc = argc;
+			unparsed_options.argv = argv;
 
 			opterr = 0; // Don't let getopt print messages.
 			optind = 1; // Reset in case parse() is called more than once in a process.
@@ -722,12 +720,14 @@ class OptionParser {
 				if (opt == 1) {
 					if (optarg != nullptr) {
 						parsed_options.addNonOptionArgument(std::string_view(optarg));
+						if constexpr (parseUntil == FirstNonOptionArgument) break;
 					}
 					continue;
 				}
 
 				if (opt == '?') {
 					// Either unknown option or missing required argument
+					if (parseUntil == FirstError) break;
 					// For shortopts missing arg: optopt is set to the offending option character.
 					if (optopt != 0) {
 						const auto* o = find_by_short(optopt);
@@ -741,7 +741,7 @@ class OptionParser {
 									? o->longopt.data
 									: "???");
 							}
-
+							if constexpr (parseUntil == FirstMissingArgumentError) break;
 							throw std::runtime_error(std::string("Missing required argument for option: ")
 								+ option_name);
 						}
@@ -753,12 +753,14 @@ class OptionParser {
 					if (!long_name.empty()) {
 						const auto* o = find_by_long(long_name);
 						if (o && o->argRequirement == XGetOpt::ArgumentRequirement::RequiredArgument) {
+							if constexpr (parseUntil == FirstMissingArgumentError) break;
 							throw std::runtime_error(std::string("Missing required argument for option: --")
 								+ std::string(long_name));
 						}
 					}
 
 					// Otherwise: unknown option
+					if constexpr (parseUntil == FirstUnrecognizedOptionError) break;
 					if (culprit_tok) {
 						throw std::runtime_error(std::string("Unknown option: ") + culprit_tok);
 					}
@@ -774,7 +776,50 @@ class OptionParser {
 
 				parsed_options.addOption(ParsedOption(opt, argument));
 			}
-			return parsed_options;
+
+			unparsed_options.argc = argc - optind;
+			unparsed_options.argv = &argv[optind];
+			return std::make_pair(parsed_options, unparsed_options);
+		}
+	public:
+		/**
+		 * @brief Get the compile-time generated help string
+		 * 
+		 * @return constexpr std::string_view The help string for this option parser detailing all options
+		 */
+		constexpr std::string_view getHelpString() const {
+			return help_string.view();
+		}
+
+		constexpr const OptionArray& getOptions() const {
+			return options;
+		}
+
+		/**
+		 * @brief Parse command-line arguments according to the defined options
+		 * 
+		 * @param argc The argument count
+		 * @param argv The argument vector
+		 * @return OptionSequence The sequence of parsed options and non-option arguments
+		 */
+		OptionSequence parse(int argc, char* argv[]) const {
+			return parse_impl<AllOptions>(argc, argv).first;
+		}
+
+		/**
+		 * @brief Parse command-line arguments until a specified condition is met
+		 *
+		 * This overload allows specifying a condition to stop parsing early,
+		 * such as stopping at the first non-option argument or the first error.
+		 * 
+		 * @tparam end The condition to stop parsing at
+		 * @param argc The argument count
+		 * @param argv The argument vector
+		 * @return std::pair<OptionSequence, OptionRemainder> A pair containing the parsed options and the remaining unparsed arguments
+		 */
+		template<StopCondition end>
+		std::pair<OptionSequence, OptionRemainder> parse_until(int argc, char* argv[]) const {
+			return parse_impl<end>(argc, argv);
 		}
 };
 

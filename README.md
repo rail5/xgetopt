@@ -92,8 +92,46 @@ You can create an `OptionParser` instance using the `XGETOPT_PARSER` macro, whic
 Methods available:
 
  - `parse(int argc, char* argv[])`: Parses the command-line arguments and returns an `OptionSequence` containing the parsed options and non-option arguments. Throws an exception if invalid options are provided.
+ - `parse_until<StopCondition>(int argc, char* argv[])`: Parses the command-line arguments until a specified stop condition is met (e.g., first non-option argument, first error). Returns a pair of `OptionSequence` and `OptionRemainder`.
  - `getHelpString()`: Returns the compile-time generated help string for the defined options.
  - `getOptions()`: Returns the array of defined options.
+
+#### Stop Conditions
+
+The `parse_until` method allows you to specify a stop condition using the `StopCondition` enum:
+
+ - `AllOptions`
+   - Parse all options and arguments (default behavior of `parse` method).
+ - `BeforeFirstNonOptionArgument`
+   - Stop parsing when the first non-option argument is encountered. The non-option argument and all subsequent arguments will be included in the `OptionRemainder`.
+ - `AfterFirstNonOptionArgument`
+   - Stop parsing *after* the first non-option argument is encountered. The non-option argument is included in the parsed options, but subsequent arguments will be included in the `OptionRemainder`.
+ - `BeforeFirstError`
+   - Stop parsing when the first error (unknown option or missing required argument) is encountered. The error-causing option and all subsequent arguments will be included in the `OptionRemainder`.
+
+Examples of `parse_until`:
+
+```cpp
+auto [options, unparsed]
+ = parser.parse_until<XGetOpt::BeforeFirstNonOptionArgument>(argc, argv);
+// Parsed options will NOT include any non-option arguments
+
+auto [options, unparsed]
+ = parser.parse_until<XGetOpt::AfterFirstNonOptionArgument>(argc, argv);
+// Parsed options will include EXACTLY ONE non-option argument (the first one)
+
+auto [options, unparsed]
+ = parser.parse_until<XGetOpt::BeforeFirstError>(argc, argv);
+// Parsed options will include all valid options up to the first error
+// No exceptions will be thrown on invalid options
+```
+
+##### `OptionRemainder` Struct
+
+The `OptionRemainder` struct is returned by the `parse_until` method and contains the remaining unparsed arguments after parsing stops due to the specified stop condition. It has the following members:
+
+ - `int argc`: The count of remaining unparsed arguments.
+ - `char** argv`: A pointer to the remaining unparsed arguments, indexed from the original `argv`.
 
 #### Compile-Time Generated Help String
 
