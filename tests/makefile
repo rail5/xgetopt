@@ -1,7 +1,10 @@
 # XGetOpt test suite (GNU make)
 
 CXX ?= g++
-CXXFLAGS ?= -std=gnu++20 -Wall -Wextra -Wpedantic -O0 -g
+CXXFLAGS ?= -Wall -Wextra -Wpedantic -O0 -g
+
+# Ensure we ALWAYS compile with gnu++20 standard
+CXXFLAGS += -std=gnu++20
 
 # Optional: enable with `make SAN=1`
 ifeq ($(SAN),1)
