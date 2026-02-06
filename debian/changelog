@@ -1,3 +1,10 @@
+xgetopt (0.11.1) unstable; urgency=medium
+
+  * Introducing StopConditions: Stop parsing when a certain condition is
+    met, and return both the parsed arguments and the unparsed remainder
+
+ -- rail5 <andrew@rail5.org>  Fri, 06 Feb 2026 20:12:50 +0800
+
 xgetopt (0.11.0) unstable; urgency=medium
 
   * Refactor:
