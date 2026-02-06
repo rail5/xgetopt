@@ -4,6 +4,8 @@ XGetOpt is a simple, **header-only, constexpr-first** C++20 library for parsing 
 
 Underneath, it is actually just a wrapper around GNU `getopt_long` with a more convenient C++ interface.
 
+[See the wiki](../../../../../../rail5/xgetopt/wiki/) for complete documentation and examples.
+
 ## Features
 
  - Fully constexpr, compile-time "help string" generation
@@ -12,6 +14,9 @@ Underneath, it is actually just a wrapper around GNU `getopt_long` with a more c
    - Options may have both short and long forms, or only one or the other
  - Supports options with no argument, required argument, and optional argument
  - Out-of-the-box support for non-option arguments
+ - Supports early-stop parsing via `parse_until<StopCondition>()`
+   - Stop before/after first non-option argument, or before first error
+   - Remainder of unparsed arguments provided for further processing
  - Classic option clustering (e.g. `-abc` is equivalent to `-a -b -c`)
 
 ## Example Usage
@@ -81,141 +86,7 @@ And is fully generated at compile-time.
 
 ## API Reference
 
-It is recommended to use the `XGETOPT_PARSER` and `XGETOPT_OPTION` macros to define your option parser and options, as shown in the example above.
-
-### `OptionParser` Class
-
-`XGetOpt::OptionParser` is the main class used to define and parse command-line options. It is a `constexpr` class that takes a variable number of `Option` definitions as template parameters.
-
-You can create an `OptionParser` instance using the `XGETOPT_PARSER` macro, which simplifies the syntax.
-
-Methods available:
-
- - `parse(int argc, char* argv[])`: Parses the command-line arguments and returns an `OptionSequence` containing the parsed options and non-option arguments. Throws an exception if invalid options are provided.
- - `parse_until<StopCondition>(int argc, char* argv[])`: Parses the command-line arguments until a specified stop condition is met (e.g., first non-option argument, first error). Returns a pair of `OptionSequence` and `OptionRemainder`.
- - `getHelpString()`: Returns the compile-time generated help string for the defined options.
- - `getOptions()`: Returns the array of defined options.
-
-#### Stop Conditions
-
-The `parse_until` method allows you to specify a stop condition using the `StopCondition` enum:
-
- - `AllOptions`
-   - Parse all options and arguments (default behavior of `parse` method).
- - `BeforeFirstNonOptionArgument`
-   - Stop parsing when the first non-option argument is encountered. The non-option argument and all subsequent arguments will be included in the `OptionRemainder`.
- - `AfterFirstNonOptionArgument`
-   - Stop parsing *after* the first non-option argument is encountered. The non-option argument is included in the parsed options, but subsequent arguments will be included in the `OptionRemainder`.
- - `BeforeFirstError`
-   - Stop parsing when the first error (unknown option or missing required argument) is encountered. The error-causing option and all subsequent arguments will be included in the `OptionRemainder`.
-
-Examples of `parse_until`:
-
-```cpp
-auto [options, unparsed]
- = parser.parse_until<XGetOpt::BeforeFirstNonOptionArgument>(argc, argv);
-// Parsed options will NOT include any non-option arguments
-
-auto [options, unparsed]
- = parser.parse_until<XGetOpt::AfterFirstNonOptionArgument>(argc, argv);
-// Parsed options will include EXACTLY ONE non-option argument (the first one)
-
-auto [options, unparsed]
- = parser.parse_until<XGetOpt::BeforeFirstError>(argc, argv);
-// Parsed options will include all valid options up to the first error
-// No exceptions will be thrown on invalid options
-```
-
-##### `OptionRemainder` Struct
-
-The `OptionRemainder` struct is returned by the `parse_until` method and contains the remaining unparsed arguments after parsing stops due to the specified stop condition. It has the following members:
-
- - `int argc`: The count of remaining unparsed arguments.
- - `char** argv`: A pointer to the remaining unparsed arguments, indexed from the original `argv`.
-
-#### Compile-Time Generated Help String
-
-The help string is generated at compile-time based on the options provided to the `OptionParser`. This means that you don't have to manually maintain help text that matches your options; it is always in sync.
-
-The descriptions for each option will automatically wrap at 80 characters for better readability in terminal output. For example:
-
-```cpp
-	constexpr auto parser = XGETOPT_PARSER(
-		XGETOPT_OPTION('h', "help",
-			"Display this help message and exit.",
-			XGetOpt::ArgumentRequirement::NoArgument),
-		XGETOPT_OPTION('v', "verbose",
-			"This option has an extremely long description that is intended to test the help string generation functionality of the XGetOpt library. XGetOpt should correctly format this description across multiple lines, ensuring that it remains readable and well-structured within the constraints of an 80-character line limit.",
-			XGetOpt::ArgumentRequirement::NoArgument)
-	);
-```
-
-Produces the following help string:
-
-```cpp
-  -h, --help    Display this help message and exit.
-  -v, --verbose This option has an extremely long description that is intended 
-                to test the help string generation functionality of the XGetOpt 
-                library. XGetOpt should correctly format this description across
-                multiple lines, ensuring that it remains readable and 
-                well-structured within the constraints of an 80-character line 
-                limit.
-```
-
-
-### `Option` Class
-
-`XGetOpt::Option` represents a single command-line option. It contains:
-
- - `shortopt`: The short option character (e.g., 'h' for `-h`). Use a unique value outside the ASCII printable range (conventionally, integers numbered from 1000 onward) for options without a short form.
- - `longopt`: The long option string (e.g., "help" for `--help`). Use an empty string for options without a long form.
- - `description`: A brief description of the option, used in the help string.
- - `argRequirement`: An enum value indicating whether the option requires an argument, has an optional argument, or has no argument.
- - `argumentPlaceholder`: A string representing the placeholder for the argument in the help string (e.g., "file" for an output file).
-
-You can create an `Option` instance using the `XGETOPT_OPTION` macro, which simplifies the syntax.
-
-
-### `OptionSequence` Class
-
-`XGetOpt::OptionSequence` holds the results of parsing command-line arguments. It contains:
-
- - A list of `ParsedOption` objects representing each option that was provided on the command line, along with any arguments if they were given.
- - A list of non-option arguments that were provided.
-
-You can iterate over the `OptionSequence` to handle each parsed option using range-based for loops or standard algorithms.
-
-```cpp
-for (const auto& opt : options) {
-	switch (opt.getShortOpt()) {
-		case 'h':
-			// Handle help option
-			break;
-		case 'o':
-			// Handle output option
-			break;
-		// Etc
-	}
-}
-```
-
-You can also access the list of non-option arguments:
-
-```cpp
-for (const auto& arg : options.getNonOptionArguments()) {
-	std::cout << "Non-option argument: " << arg << std::endl;
-}
-```
-
-These non-option arguments are stored in the order they were provided on the command line.
-
-The `hasOption(int shortopt)` member function allows you to check if a specific option was provided.
-
-```cpp
-if (options.hasOption('h')) {
-	// '-h' was one of the options specified by the user
-}
-```
+[See the wiki](../../../../../../rail5/xgetopt/wiki/) for complete documentation and examples.
 
 ## License
 
