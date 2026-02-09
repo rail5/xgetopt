@@ -137,6 +137,17 @@ In the above example, the first non-option argument is treated as the subcommand
 
 [See the wiki](../../../../../../rail5/xgetopt/wiki/) for complete documentation and examples.
 
+## Debian Package
+
+Users of Debian-based systems can install XGetOpt via the [deb.rail5.org](https://deb.rail5.org/) repository:
+
+```bash
+sudo curl -s -o /etc/apt/trusted.gpg.d/rail5-signing-key.gpg "https://deb.rail5.org/rail5-signing-key.gpg"
+sudo curl -s -o /etc/apt/sources.list.d/rail5.list "https://deb.rail5.org/rail5.list"
+sudo apt update
+sudo apt install xgetopt-dev
+```
+
 ## License
 
 XGetOpt is released under the GNU General Public License v2 or later. See the [LICENSE](LICENSE) file for details.
