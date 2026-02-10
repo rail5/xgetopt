@@ -1,3 +1,18 @@
+xgetopt (0.12.0) unstable; urgency=medium
+
+  * Removed macros, instantiate via template programming
+    The XGETOPT_PARSER and XGETOPT_OPTION macros have been removed.
+    Users should now instantiate OptionParser directly using template
+    parameters for each Option.
+  * Compile-time guarantees: no duplicate short/long options within a single
+    parser instance.
+    If two options *in the same parser* share the same short or long option,
+    a static_assert will trigger at compile-time.
+    Without this, duplicate options would lead to undefined behavior at runtime
+    when parsed by GNU getopt.
+
+ -- rail5 <andrew@rail5.org>  Tue, 10 Feb 2026 08:52:39 +0800
+
 xgetopt (0.11.2) unstable; urgency=medium
 
   * Added test suite to ensure correctness / prevent regressions
