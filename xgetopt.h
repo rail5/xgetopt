@@ -521,6 +521,32 @@ class OptionParser {
 			}...
 		}};
 
+		// Compile-time guarantee: no two options have the same shortopt value
+		static_assert([]{
+			for (size_t i = 0; i < N; i++) {
+				for (size_t j = i + 1; j < N; j++) {
+					if (options[i].shortopt == options[j].shortopt) {
+						return false;
+					}
+				}
+			}
+			return true;
+		}(), "OptionParser error: Duplicate shortopt values detected in option definitions.");
+
+		// Likewise: no two options have the same (non-empty) longopt value
+		static_assert([]{
+			for (size_t i = 0; i < N; i++) {
+				if (options[i].longopt.length() == 0) continue;
+				for (size_t j = i + 1; j < N; j++) {
+					if (options[j].longopt.length() == 0) continue;
+					if (options[i].longopt.view() == options[j].longopt.view()) {
+						return false;
+					}
+				}
+			}
+			return true;
+		}(), "OptionParser error: Duplicate longopt values detected in option definitions.");
+
 		static constexpr size_t help_string_length = Helpers::calculate_help_string_length<N>(options);
 		
 		static constexpr std::array<char, 3*N + 2> build_short_options_(const OptionArray& opts) {
