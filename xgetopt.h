@@ -205,26 +205,6 @@ struct Option {
 	static constexpr auto argumentPlaceholder = ArgumentPlaceholder;
 };
 
-// Syntactic sugar (macro): looks like a function call but instantiates Option<...>
-#define _XGETOPT_OPTION_4(shortopt, longopt, description, req) \
-	(::XGetOpt::Option<(shortopt), \
-		::XGetOpt::Helpers::FixedString{longopt}, \
-		::XGetOpt::Helpers::FixedString{description}, \
-		(req)>{})
-
-#define _XGETOPT_OPTION_5(shortopt, longopt, description, req, argplaceholder) \
-	(::XGetOpt::Option<(shortopt), \
-		::XGetOpt::Helpers::FixedString{longopt}, \
-		::XGetOpt::Helpers::FixedString{description}, \
-		(req), \
-		::XGetOpt::Helpers::FixedString{argplaceholder}>{})
-
-// Macro dispatcher: If 5 args, use WITHPLACEHOLDER, else use NOPLACEHOLDER
-#define _XGETOPT_OPTION_SELECT(_1, _2, _3, _4, _5, NAME, ...) NAME
-
-#define XGETOPT_OPTION(...) \
-	_XGETOPT_OPTION_SELECT(__VA_ARGS__, _XGETOPT_OPTION_5, _XGETOPT_OPTION_4)(__VA_ARGS__)
-
 namespace Helpers {
 
 struct OptionView {
@@ -871,16 +851,6 @@ class OptionParser {
 			return parse_impl<end>(argc, argv);
 		}
 };
-
-template<Helpers::option_like... Opts>
-[[nodiscard]] constexpr OptionParser<Opts...> make_option_parser(Opts... /*opts*/) {
-	return OptionParser<Opts...>{};
-}
-
-// More macro sugar:
-//  constexpr auto parser = XGETOPT_PARSER(XGETOPT_OPTION(...), XGETOPT_OPTION(...), ...);
-#define XGETOPT_PARSER(...) \
-	(::XGetOpt::make_option_parser(__VA_ARGS__))
 
 } // namespace XGetOpt
 

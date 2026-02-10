@@ -75,22 +75,22 @@ struct ArgvBuilder {
 };
 
 static constexpr auto make_main_parser() {
-	return XGETOPT_PARSER(
-		XGETOPT_OPTION('h', "help", "help", XGetOpt::NoArgument),
-		XGETOPT_OPTION('v', "verbose", "verbose", XGetOpt::NoArgument),
-		XGETOPT_OPTION('o', "output", "output", XGetOpt::RequiredArgument, "file"),
-		XGETOPT_OPTION('p', "param", "param", XGetOpt::OptionalArgument),
-		XGETOPT_OPTION(1001, "long-only", "long-only", XGetOpt::NoArgument),
-		XGETOPT_OPTION('s', "", "short-only", XGetOpt::NoArgument),
-		XGETOPT_OPTION(1002, "long-description", "This item has an extremely long description, which XGetOpt is expected to wrap at 80-character lines for easy display in a terminal. If it fails to do this, it is not functioning properly.", XGetOpt::RequiredArgument, "arg")
-	);
+	return XGetOpt::OptionParser<
+		XGetOpt::Option<'h', "help", "help", XGetOpt::NoArgument>,
+		XGetOpt::Option<'v', "verbose", "verbose", XGetOpt::NoArgument>,
+		XGetOpt::Option<'o', "output", "output", XGetOpt::RequiredArgument, "file">,
+		XGetOpt::Option<'p', "param", "param", XGetOpt::OptionalArgument>,
+		XGetOpt::Option<1001, "long-only", "long-only", XGetOpt::NoArgument>,
+		XGetOpt::Option<'s', "", "short-only", XGetOpt::NoArgument>,
+		XGetOpt::Option<1002, "long-description", "This item has an extremely long description, which XGetOpt is expected to wrap at 80-character lines for easy display in a terminal. If it fails to do this, it is not functioning properly.", XGetOpt::RequiredArgument, "arg">
+	>{};
 }
 
 static constexpr auto make_sub_parser() {
-	return XGETOPT_PARSER(
-		XGETOPT_OPTION('a', "alpha", "alpha", XGetOpt::NoArgument),
-		XGETOPT_OPTION('b', "beta", "beta", XGetOpt::RequiredArgument, "value")
-	);
+	return XGetOpt::OptionParser<
+		XGetOpt::Option<'a', "alpha", "alpha", XGetOpt::NoArgument>,
+		XGetOpt::Option<'b', "beta", "beta", XGetOpt::RequiredArgument, "value">
+	>{};
 }
 
 static void test_help_string_smoke() {

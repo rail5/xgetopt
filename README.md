@@ -27,16 +27,14 @@ XGetOpt is a simple, **header-only, constexpr-first** C++20 library for parsing 
 #include <iostream>
 
 int main(int argc, char* argv[]) {
-	constexpr auto parser = XGETOPT_PARSER(
-		XGETOPT_OPTION('h', "help", "Display this help message", XGetOpt::NoArgument),
-		XGETOPT_OPTION('o', "output", "Specify output file", XGetOpt::RequiredArgument, "file"),
-		XGETOPT_OPTION('p', "parameter", "Specify optional parameter", XGetOpt::OptionalArgument),
-
-		XGETOPT_OPTION(1001, "long-option-only", "This has no shortopt", XGetOpt::NoArgument),
-		XGETOPT_OPTION(1002, "long-option-with-arg", "This has no shortopt and requires an argument", XGetOpt::RequiredArgument),
-
-		XGETOPT_OPTION('s', "", "This has no longopt", XGetOpt::NoArgument)
-	);
+	constexpr XGetOpt::OptionParser<
+		XGetOpt::Option<'h', "help", "Display this help message", XGetOpt::NoArgument>,
+		XGetOpt::Option<'o', "output", "Specify output file", XGetOpt::RequiredArgument, "file">,
+		XGetOpt::Option<'p', "parameter", "Specify optional parameter", XGetOpt::OptionalArgument>,
+		XGetOpt::Option<1001, "long-option-only", "This has no shortopt", XGetOpt::NoArgument>,
+		XGetOpt::Option<1002, "long-option-with-arg", "This has no shortopt and requires an argument", XGetOpt::RequiredArgument>,
+		XGetOpt::Option<'s', "", "This has no longopt", XGetOpt::NoArgument>
+	> parser;
 	
 	XGetOpt::OptionSequence options;
 
@@ -92,17 +90,17 @@ And is fully generated at compile-time.
 #include <iostream>
 
 int main(int argc, char* argv[]) {
-	constexpr auto parser = XGETOPT_PARSER(
-		XGETOPT_OPTION('h', "help", "Display this help message", XGetOpt::NoArgument),
-		XGETOPT_OPTION('o', "output", "Specify output file", XGetOpt::RequiredArgument, "file"),
-		XGETOPT_OPTION('p', "parameter", "Specify optional parameter", XGetOpt::OptionalArgument)
-	);
+	constexpr XGetOpt::OptionParser<
+		XGetOpt::Option<'h', "help", "Display this help message", XGetOpt::NoArgument>,
+		XGetOpt::Option<'o', "output", "Specify output file", XGetOpt::RequiredArgument, "file">,
+		XGetOpt::Option<'p', "parameter", "Specify optional parameter", XGetOpt::OptionalArgument>
+	> parser;
 
-	constexpr auto subCommandParser = XGETOPT_PARSER(
-		XGETOPT_OPTION('a', "alpha", "Alpha option for subcommand", XGetOpt::NoArgument),
-		XGETOPT_OPTION('b', "beta", "Beta option for subcommand", XGetOpt::RequiredArgument, "value"),
-		XGETOPT_OPTION('h', "help", "Display this help message for subcommand", XGetOpt::NoArgument)
-	);
+	constexpr XGetOpt::OptionParser<
+		XGetOpt::Option<'a', "alpha", "Alpha option for subcommand", XGetOpt::NoArgument>,
+		XGetOpt::Option<'b', "beta", "Beta option for subcommand", XGetOpt::RequiredArgument, "value">,
+		XGetOpt::Option<'h', "help", "Display this help message for subcommand", XGetOpt::NoArgument>
+	> subCommandParser;
 
 	try {
 		// The first non-option argument is treated as the subcommand name
