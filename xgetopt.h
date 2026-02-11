@@ -487,12 +487,34 @@ class OptionSequence {
  *     and it as well as any subsequent arguments are left unparsed
  * 
  */
-enum StopCondition {
-	AllOptions,
-	BeforeFirstNonOptionArgument,
-	AfterFirstNonOptionArgument,
-	BeforeFirstError
+struct StopCondition {};
+struct AllOptions : public StopCondition {};
+
+template <size_t N>
+struct BeforeNthNonOptionArgument : public StopCondition {
+	static constexpr size_t BeforeN = N;
 };
+template <size_t N>
+struct AfterNthNonOptionArgument : public StopCondition {
+	static constexpr size_t AfterN = N;
+};
+
+struct BeforeFirstNonOptionArgument : public BeforeNthNonOptionArgument<1> {};
+struct AfterFirstNonoptionArgument : public AfterNthNonOptionArgument<1> {};
+
+template <typename T>
+concept BeforeNthType = std::derived_from<T, StopCondition>
+	&& requires {
+		{ T::BeforeN } -> std::convertible_to<size_t>;
+	};
+
+template <typename T>
+concept AfterNthType = std::derived_from<T, StopCondition>
+	&& requires {
+		{ T::AfterN } -> std::convertible_to<size_t>;
+	};
+
+struct BeforeFirstError : public StopCondition {};
 
 struct OptionRemainder {
 	int argc;
@@ -704,7 +726,8 @@ class OptionParser {
 		static constexpr Helpers::FixedString<help_string_length> help_string
 			= generateHelpString(options);
 
-		template <StopCondition parseUntil>
+		template <typename parseUntil>
+		requires std::derived_from<parseUntil, StopCondition>
 		std::pair<OptionSequence, OptionRemainder> parse_impl(int argc, char* argv[]) const {
 			OptionSequence parsed_options;
 			OptionRemainder unparsed_options{argc, argv};
@@ -713,6 +736,7 @@ class OptionParser {
 			optind = 1; // Reset in case parse() is called more than once in a process.
 
 			int remainder_start = -1;
+			size_t non_option_argument_count = 0;
 
 			auto find_by_short = [&](int s) -> const auto* {
 				for (size_t i = 0; i < N; i++) {
@@ -751,24 +775,29 @@ class OptionParser {
 
 				if (opt == 1) {
 					// RETURN_IN_ORDER: optarg is the non-option, from argv[token_index]
+					non_option_argument_count++;
 					if (optarg != nullptr) {
-						if constexpr (parseUntil == BeforeFirstNonOptionArgument) {
-							remainder_start = token_index; // include the non-option in remainder
-							break;
+						if constexpr (BeforeNthType<parseUntil>) {
+							if (non_option_argument_count >= parseUntil::BeforeN) {
+								remainder_start = token_index; // include the non-option in remainder
+								break;
+							}
 						}
 
 						parsed_options.addNonOptionArgument(std::string_view(optarg));
 
-						if constexpr (parseUntil == AfterFirstNonOptionArgument) {
-							// optind is already positioned after this non-option
-							break;
+						if constexpr (AfterNthType<parseUntil>) {
+							if (non_option_argument_count >= parseUntil::AfterN) {
+								// optind is already positioned after this non-option
+								break;
+							}
 						}
 					}
 					continue;
 				}
 
 				if (opt == '?') {
-					if constexpr (parseUntil == BeforeFirstError) {
+					if constexpr (std::derived_from<parseUntil, BeforeFirstError>) {
 						remainder_start = token_index; // include offending token in remainder
 						break;
 					}
@@ -822,7 +851,7 @@ class OptionParser {
 			// GNU getopt treats `--` as an end-of-options marker and returns -1 without
 			// yielding the remaining arguments via RETURN_IN_ORDER.
 			// We still want those remaining tokens to be treated as non-option arguments.
-			if constexpr (parseUntil == AllOptions || parseUntil == BeforeFirstError) {
+			if constexpr (std::derived_from<parseUntil, AllOptions> || std::derived_from<parseUntil, BeforeFirstError>) {
 				if (remainder_start < 0) {
 					for (int i = optind; i < argc; i++) {
 						parsed_options.addNonOptionArgument(std::string_view(argv[i]));
@@ -872,7 +901,8 @@ class OptionParser {
 		 * @param argv The argument vector
 		 * @return std::pair<OptionSequence, OptionRemainder> A pair containing the parsed options and the remaining unparsed arguments
 		 */
-		template<StopCondition end>
+		template<typename end>
+		requires std::derived_from<end, StopCondition>
 		std::pair<OptionSequence, OptionRemainder> parse_until(int argc, char* argv[]) const {
 			return parse_impl<end>(argc, argv);
 		}
