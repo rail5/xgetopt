@@ -7,18 +7,20 @@ XGetOpt is a simple, **header-only, constexpr-first** C++20 library for parsing 
 ## Features
 
  - Fully constexpr, **compile-time help-string generation**
- - Fully constexpr option definitions and metadata
  - **First-class** support for **non-option arguments**
  - Support for **early-stop parsing** via `parse_until<StopCondition>()`
    - Stop before/after first non-option argument, or before first error
    - Remainder of unparsed arguments provided for further processing
- - Supports short options (e.g. `-a`), and long options (e.g. `--alpha`)
-   - Options may have both short and long forms, or only one or the other
- - Supports options with no argument, required argument, and optional argument
- - Classic option clustering (e.g. `-abc` is equivalent to `-a -b -c`)
  - Preservation of GNU `getopt` semantics
+   - Short options, long options, optional arguments, option clustering, etc
    - Matches user expectations
    - XGetOpt is in fact a wrapper around `getopt_long`
+
+The basic design goals are:
+
+ - Simple to use
+ - No added cost compared to using `getopt_long` directly
+ - Preservation of familiar semantics
 
 ## Example Usage
 
