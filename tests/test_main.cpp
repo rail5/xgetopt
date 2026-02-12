@@ -360,6 +360,47 @@ static void test_parse_until_after_2nd_nonoption_consumes_two_nonoptions() {
 	TEST_EQ(std::string_view(rem.argv[1]), std::string_view("x"));
 }
 
+static void test_custom_stopconditions_beforefirsterror_combined_beforenthnonoption() {
+	// This "custom" StopCondition should stop before the first error
+	// or before the 2nd non-option argument, whichever comes first.
+	struct BeforeFirstErrorAndBeforeSecondNonOption : public XGetOpt::BeforeFirstError, public XGetOpt::BeforeNthNonOptionArgument<2> {};
+
+	constexpr auto parser = make_main_parser();
+
+	{ // stops before 2nd non-option
+		ArgvBuilder av{"prog", "-v", "file1", "--output", "x", "file2", "-h"};
+		auto [opts, rem] = parser.parse_until<BeforeFirstErrorAndBeforeSecondNonOption>(av.argc(), av.data());
+		TEST_ASSERT(opts.hasOption('v'));
+
+		// The first non-option should be included in parsed results.
+		auto nonopts = opts.getNonOptionArguments();
+		TEST_EQ(nonopts.size(), size_t{1});
+		TEST_EQ(nonopts[0], std::string_view("file1"));
+
+		// Options before the 2nd non-option should still be parsed.
+		TEST_ASSERT(opts.hasOption('o'));
+		TEST_ASSERT(!opts.hasOption('h'));
+
+		// Remainder begins at the 2nd non-option (and includes everything after it).
+		TEST_ASSERT(rem.argc >= 1);
+		TEST_EQ(std::string_view(rem.argv[0]), std::string_view("file2"));
+	}
+
+	{ // stops before first error
+		ArgvBuilder av{"prog", "-v", "--nope", "file1"};
+		auto [opts, rem] = parser.parse_until<BeforeFirstErrorAndBeforeSecondNonOption>(av.argc(), av.data());
+		TEST_ASSERT(opts.hasOption('v'));
+
+		// No non-options should be included in parsed results.
+		auto nonopts = opts.getNonOptionArguments();
+		TEST_EQ(nonopts.size(), size_t{0});
+
+		// Remainder begins at the unknown option
+		TEST_ASSERT(rem.argc >= 1);
+		TEST_EQ(std::string_view(rem.argv[0]), std::string_view("--nope"));
+	}
+}
+
 static void test_parse_throws_on_unknown_and_missing_arg() {
 	constexpr auto parser = make_main_parser();
 	{ // unknown
@@ -444,6 +485,7 @@ int main() {
 	run_test("parse_until_after_first_nonoption_consumes_one_nonoption", test_parse_until_after_first_nonoption_consumes_one_nonoption);
 	run_test("parse_until_before_2nd_nonoption", test_parse_until_before_2nd_nonoption_stops_before_second);
 	run_test("parse_until_after_2nd_nonoption", test_parse_until_after_2nd_nonoption_consumes_two_nonoptions);
+	run_test("custom_stopconditions_beforefirsterror_combined_beforenthnonoption", test_custom_stopconditions_beforefirsterror_combined_beforenthnonoption);
 	run_test("parse_throws_on_unknown_and_missing_arg", test_parse_throws_on_unknown_and_missing_arg);
 	run_test("parse_until_before_first_error", test_parse_until_before_first_error_does_not_throw_and_returns_remainder);
 
