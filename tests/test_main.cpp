@@ -403,6 +403,44 @@ static void test_multiple_parse_and_combine() {
 	TEST_EQ(std::string_view(argv[1]), std::string_view("-h"));
 }
 
+static void test_ignore_errors_by_multiple_parse() {
+	// Effect: Ignore all parsing errors
+	// Achieved by repeatedly parsing with BeforeFirstError,
+	// skipping the offending token each time,
+	// and combining the resulting OptionSequences.
+	constexpr auto parser = make_main_parser();
+	ArgvBuilder av{"prog", "-v", "--nope", "-h", "--output", "out.txt", "--bad", "--output"};
+	auto total_opts = XGetOpt::OptionSequence{};
+	int argc = av.argc();
+	char** argv = av.data();
+	while (argc > 1) {
+		auto [opts, rem] = parser.parse_until<XGetOpt::BeforeFirstError>(argc, argv);
+		total_opts += opts;
+		if (rem.argc == argc) {
+			// No progress made; skip first token in remainder
+			argc -= 1;
+			argv += 1;
+		} else {
+			argc = rem.argc;
+			argv = rem.argv;
+		}
+	}
+	TEST_ASSERT(total_opts.hasOption('v'));
+	TEST_ASSERT(total_opts.hasOption('h'));
+	bool saw_output = false;
+	for (const auto& opt : total_opts) {
+		if (opt.getShortOpt() == 'o') {
+			saw_output = true;
+			TEST_ASSERT(opt.hasArgument());
+			TEST_EQ(opt.getArgument(), std::string_view("out.txt"));
+		}
+	}
+	TEST_ASSERT(saw_output);
+	// No non-option arguments should be present
+	auto nonopts = total_opts.getNonOptionArguments();
+	TEST_EQ(nonopts.size(), size_t{0});
+}
+
 static void run_test(const char* name, void (*fn)()) {
 	try {
 		fn();
@@ -440,6 +478,7 @@ int main() {
 	run_test("multiple_parse_and_combine", test_multiple_parse_and_combine);
 	run_test("parse_throws_on_unknown_and_missing_arg", test_parse_throws_on_unknown_and_missing_arg);
 	run_test("parse_until_before_first_error", test_parse_until_before_first_error_does_not_throw_and_returns_remainder);
+	run_test("ignore_errors_by_multiple_parse", test_ignore_errors_by_multiple_parse);
 
 	std::cout << "\npassed: " << g_passed << ", failed: " << g_failed << "\n";
 	return g_failed == 0 ? 0 : 1;
