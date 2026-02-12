@@ -508,13 +508,13 @@ struct AfterNthNonOptionArgument : public StopCondition {
 struct BeforeFirstNonOptionArgument : public BeforeNthNonOptionArgument<1> {};
 struct AfterFirstNonOptionArgument : public AfterNthNonOptionArgument<1> {};
 template <typename T>
-concept BeforeNthType = std::derived_from<T, StopCondition>
+concept BeforeNthType = std::is_base_of_v<StopCondition, T>
 	&& requires {
 		{ T::BeforeN } -> std::convertible_to<size_t>;
 	};
 
 template <typename T>
-concept AfterNthType = std::derived_from<T, StopCondition>
+concept AfterNthType = std::is_base_of_v<StopCondition, T>
 	&& requires {
 		{ T::AfterN } -> std::convertible_to<size_t>;
 	};
@@ -732,7 +732,7 @@ class OptionParser {
 			= generateHelpString(options);
 
 		template <typename parseUntil>
-		requires std::derived_from<parseUntil, StopCondition>
+		requires std::is_base_of_v<StopCondition, parseUntil>
 		std::pair<OptionSequence, OptionRemainder> parse_impl(int argc, char* argv[]) const {
 			OptionSequence parsed_options;
 			OptionRemainder unparsed_options{argc, argv};
@@ -802,7 +802,7 @@ class OptionParser {
 				}
 
 				if (opt == '?') {
-					if constexpr (std::derived_from<parseUntil, BeforeFirstError>) {
+					if constexpr (std::is_base_of_v<BeforeFirstError, parseUntil>) {
 						remainder_start = token_index; // include offending token in remainder
 						break;
 					}
@@ -856,7 +856,7 @@ class OptionParser {
 			// GNU getopt treats `--` as an end-of-options marker and returns -1 without
 			// yielding the remaining arguments via RETURN_IN_ORDER.
 			// We still want those remaining tokens to be treated as non-option arguments.
-			if constexpr (std::derived_from<parseUntil, AllOptions> || std::derived_from<parseUntil, BeforeFirstError>) {
+			if constexpr (std::is_base_of_v<AllOptions, parseUntil> || std::is_base_of_v<BeforeFirstError, parseUntil>) {
 				if (remainder_start < 0) {
 					for (int i = optind; i < argc; i++) {
 						parsed_options.addNonOptionArgument(std::string_view(argv[i]));
@@ -907,7 +907,7 @@ class OptionParser {
 		 * @return std::pair<OptionSequence, OptionRemainder> A pair containing the parsed options and the remaining unparsed arguments
 		 */
 		template<typename end>
-		requires std::derived_from<end, StopCondition>
+		requires std::is_base_of_v<StopCondition, end>
 		std::pair<OptionSequence, OptionRemainder> parse_until(int argc, char* argv[]) const {
 			return parse_impl<end>(argc, argv);
 		}
