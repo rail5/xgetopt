@@ -360,6 +360,49 @@ static void test_parse_until_before_first_error_does_not_throw_and_returns_remai
 	}
 }
 
+static void test_multiple_parse_and_combine() {
+	// Effect: Stop after Nth non-option argument
+	// Achieved by repeatedly parsing and combining the resulting OptionSequences.
+	constexpr auto parser = make_main_parser();
+	ArgvBuilder av{"prog", "-v", "file1", "--output", "out.txt", "file2", "-h"};
+	auto total_opts = XGetOpt::OptionSequence{};
+	int nonopt_count = 0;
+	int argc = av.argc();
+	char** argv = av.data();
+	while (nonopt_count < 2) {
+		auto [opts, rem] = parser.parse_until<XGetOpt::AfterFirstNonOptionArgument>(argc, argv);
+		total_opts += opts;
+		nonopt_count++;
+		argc = rem.argc + 1;
+		argv = rem.argv - 1; // Adjust to add an argv[0] that's ignored
+			// This is unsafe generally and shouldn't be done in production code
+			// In production, you would either want to:
+			// 1. FIRST verify that rem.argv does NOT point to argv[0]
+			// Or better, 2. Copy rem.argv into a new array with a proper, ignorable argv[0]
+	}
+	TEST_ASSERT(total_opts.hasOption('v'));
+	TEST_ASSERT(!total_opts.hasOption('h'));
+	bool saw_output = false;
+	for (const auto& opt : total_opts) {
+		if (opt.getShortOpt() == 'o') {
+			saw_output = true;
+			TEST_ASSERT(opt.hasArgument());
+			TEST_EQ(opt.getArgument(), std::string_view("out.txt"));
+		}
+	}
+	TEST_ASSERT(saw_output);
+
+	// Two non-option arguments collected
+	auto nonopts = total_opts.getNonOptionArguments();
+	TEST_EQ(nonopts.size(), size_t{2});
+	TEST_EQ(nonopts[0], std::string_view("file1"));
+	TEST_EQ(nonopts[1], std::string_view("file2"));
+
+	// Remaining args after two non-options should be "-h"
+	TEST_ASSERT(argc >= 1);
+	TEST_EQ(std::string_view(argv[1]), std::string_view("-h"));
+}
+
 static void run_test(const char* name, void (*fn)()) {
 	try {
 		fn();
@@ -394,6 +437,7 @@ int main() {
 	run_test("double_dash_collects_remaining_as_nonoptions", test_double_dash_collects_remaining_as_nonoptions);
 	run_test("parse_until_before_first_nonoption_subcommand_pattern", test_parse_until_before_first_nonoption_subcommand_pattern);
 	run_test("parse_until_after_first_nonoption_consumes_one_nonoption", test_parse_until_after_first_nonoption_consumes_one_nonoption);
+	run_test("multiple_parse_and_combine", test_multiple_parse_and_combine);
 	run_test("parse_throws_on_unknown_and_missing_arg", test_parse_throws_on_unknown_and_missing_arg);
 	run_test("parse_until_before_first_error", test_parse_until_before_first_error_does_not_throw_and_returns_remainder);
 

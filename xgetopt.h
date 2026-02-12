@@ -413,12 +413,35 @@ class OptionSequence {
 	private:
 		std::vector<ParsedOption> options;
 		std::vector<std::string_view> nonOptionArguments;
+
+		/**
+		 * @brief Add another OptionSequence to this one
+		 *
+		 * The options and non-option arguments from the other sequence are appended to this one.
+		 * This is accessible via operator+= and operator+.
+		 * 
+		 * @param other The other OptionSequence to add
+		 */
+		void add(const OptionSequence& other) {
+			options.insert(options.end(), other.options.begin(), other.options.end());
+			nonOptionArguments.insert(nonOptionArguments.end(),
+				other.nonOptionArguments.begin(), other.nonOptionArguments.end());
+		}
 	public:
 		void addOption(const ParsedOption& opt) {
 			options.push_back(opt);
 		}
 		void addNonOptionArgument(std::string_view arg) {
 			nonOptionArguments.push_back(arg);
+		}
+
+		OptionSequence& operator+=(const OptionSequence& rhs) {
+			add(rhs);
+			return *this;
+		}
+		friend OptionSequence operator+(OptionSequence lhs, const OptionSequence& rhs) {
+			lhs.add(rhs);
+			return lhs;
 		}
 
 		auto begin() const {
