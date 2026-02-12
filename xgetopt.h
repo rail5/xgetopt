@@ -465,26 +465,32 @@ class OptionSequence {
 };
 
 /**
- * @enum StopCondition
- * @brief Specifies when to stop parsing options
+ * @struct StopCondition
+ * @brief Base struct for specifying conditions to stop option parsing
+ * Stop Conditions can be used with OptionParser::parse_until to control when parsing should stop.
  *
- * An explanation of each:
- *  - AllOptions:
- *      Parse all options until the end of the argument list
+ * The following Stop Conditions are provided:
  *
- *  - BeforeFirstNonOptionArgument:
- *      Stop parsing when the first non-option argument is encountered
- *      The non-option argument and any subsequent arguments are left unparsed
+ * - AllOptions:
+ *    Continue parsing until all options and non-option arguments are processed (the default behavior).
  *
- *  - AfterFirstNonOptionArgument:
- *      Stop parsing after the first non-option argument is encountered
- *      The first non-option argument is included in the parsed results,
- *      but any subsequent arguments are left unparsed
+ * - BeforeNthNonOptionArgument<N>:
+ *    Stop parsing when the N-th non-option argument is encountered, before processing that argument.
+ *    The unprocessed non-option argument and all subsequent arguments will be returned as the remainder.
  *
- *  - BeforeFirstError:
- *     Stop parsing when the first error is encountered (unknown option or missing required argument)
- *     The offending option is not included in the parsed results,
- *     and it as well as any subsequent arguments are left unparsed
+ * - AfterNthNonOptionArgument<N>:
+ *    Stop parsing after the N-th non-option argument has been processed.
+ *    The remainder will start from the argument following the N-th non-option argument.
+ *
+ * - BeforeFirstNonOptionArgument:
+ *    Equivalent to BeforeNthNonOptionArgument<1>, stopping before the first non-option argument.
+ *
+ * - AfterFirstNonOptionArgument:
+ *    Equivalent to AfterNthNonOptionArgument<1>, stopping after the first non-option argument.
+ *
+ * - BeforeFirstError:
+ *    Stop parsing when the first error is encountered (e.g., unknown option, missing required argument).
+ *    The remainder will start from the offending token.
  * 
  */
 struct StopCondition {};
@@ -500,8 +506,7 @@ struct AfterNthNonOptionArgument : public StopCondition {
 };
 
 struct BeforeFirstNonOptionArgument : public BeforeNthNonOptionArgument<1> {};
-struct AfterFirstNonoptionArgument : public AfterNthNonOptionArgument<1> {};
-
+struct AfterFirstNonOptionArgument : public AfterNthNonOptionArgument<1> {};
 template <typename T>
 concept BeforeNthType = std::derived_from<T, StopCondition>
 	&& requires {
