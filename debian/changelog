@@ -1,3 +1,18 @@
+xgetopt (1.0.0) unstable; urgency=medium
+
+  * SemVer v1.0.0 release:
+    + Commitment to long-term API stability
+    + Guaranteed functionality on GNU platforms
+      Support for other platforms is best-effort
+      All tests passing on glibc, musl, OpenBSD, FreeBSD, macOS, and Haiku
+  * Updates:
+    + Compile-time guarantee: no two options in the same parser can share the
+      same shortopt or the same longopt. This is done via static_assert
+    + Added operator+ and operator+= to OptionSequence, allowing users to
+      combine multiple OptionSequences into one (e.g. for repeated parsing)
+
+ -- rail5 <andrew@rail5.org>  Fri, 13 Feb 2026 12:19:28 +0800
+
 xgetopt (0.12.0) unstable; urgency=medium
 
   * Removed macros, instantiate via template programming
