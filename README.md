@@ -11,7 +11,7 @@ XGetOpt is a simple, **header-only, constexpr-first** C++20 library for parsing 
  - Support for **early-stop parsing** via `parse_until<StopCondition>()`
    - Stop before/after first non-option argument, or before first error
    - Remainder of unparsed arguments provided for further processing
- - Preservation of GNU `getopt` semantics
+ - Preservation of `getopt` semantics
    - Short options, long options, optional arguments, option clustering, etc
    - Matches user expectations
    - XGetOpt is in fact a wrapper around `getopt_long`
@@ -147,6 +147,10 @@ sudo curl -s -o /etc/apt/sources.list.d/rail5.list "https://deb.rail5.org/rail5.
 sudo apt update
 sudo apt install xgetopt-dev
 ```
+
+## Compatibility
+
+XGetOpt does not guarantee compatibility outside of the GNU ecosystem, but it should work with most `getopt_long` implementations. See the [tests/README.md](tests/) for a table of tested platforms.
 
 ## License
 
