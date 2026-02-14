@@ -441,6 +441,26 @@ static void test_ignore_errors_by_multiple_parse() {
 	TEST_EQ(nonopts.size(), size_t{0});
 }
 
+static void test_plus_not_recognized_as_option() {
+	// XGetOpt prepends a '+' to the short options string to disable permutation and enforce POSIX-style parsing.
+	// If a given platform's getopt_long implementation does not support this, then '+' will be treated as a normal option character,
+	// which is not what we want. This test verifies that '+' is not treated as an option character.
+	// If we encounter a platform on which this test fails, we will need to look for other ways to enforce
+	// POSIX-style parsing on that platform.
+	//
+	// This test verifies that '-+' throws an unknown option error, and that the offending shortopt is '+'
+
+	constexpr auto parser = make_main_parser();
+	ArgvBuilder av{"prog", "-+"};
+
+	TEST_THROWS(parser.parse(av.argc(), av.data()));
+
+	auto [opts, rem] = parser.parse_until<XGetOpt::BeforeFirstError>(av.argc(), av.data());
+	TEST_EQ(opts.size(), size_t{0});
+	TEST_ASSERT(rem.argc >= 1);
+	TEST_EQ(std::string_view(rem.argv[0]), std::string_view("-+"));
+}
+
 static void run_test(const char* name, void (*fn)()) {
 	try {
 		fn();
@@ -479,6 +499,7 @@ int main() {
 	run_test("parse_throws_on_unknown_and_missing_arg", test_parse_throws_on_unknown_and_missing_arg);
 	run_test("parse_until_before_first_error", test_parse_until_before_first_error_does_not_throw_and_returns_remainder);
 	run_test("ignore_errors_by_multiple_parse", test_ignore_errors_by_multiple_parse);
+	run_test("plus_not_recognized_as_option", test_plus_not_recognized_as_option);
 
 	std::cout << "\npassed: " << g_passed << ", failed: " << g_failed << "\n";
 	return g_failed == 0 ? 0 : 1;
