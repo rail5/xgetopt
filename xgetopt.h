@@ -59,6 +59,10 @@ struct FixedString {
 			if (size < N) data[size] = '\0';
 		}
 		constexpr ~FixedString() = default;
+		constexpr FixedString(const FixedString& other) = default;
+		constexpr FixedString(FixedString&& other) noexcept = default;
+		constexpr FixedString& operator=(const FixedString& other) = default;
+		constexpr FixedString& operator=(FixedString&& other) = default;
 		
 		constexpr const char* c_str() const {
 			return data.data();
@@ -510,7 +514,7 @@ class OptionSequence {
  *     and it as well as any subsequent arguments are left unparsed
  * 
  */
-enum StopCondition {
+enum StopCondition : uint8_t {
 	AllOptions,
 	BeforeFirstNonOptionArgument,
 	AfterFirstNonOptionArgument,
@@ -572,9 +576,9 @@ class OptionParser {
 
 		static constexpr size_t help_string_length = Helpers::calculate_help_string_length<N>(options);
 		
-		static constexpr std::array<char, 3*N + 2> build_short_options_(const OptionArray& opts) {
+		static constexpr std::array<char, (3*N) + 2> build_short_options_(const OptionArray& opts) {
 			size_t short_opt_index = 0;
-			std::array<char, 3*N + 2> short_opts{};
+			std::array<char, (3*N) + 2> short_opts{};
 
 			// Flag: REQUIRE_ORDER
 			// This means that option processing stops at the first non-option argument as mandated by POSIX
@@ -626,7 +630,7 @@ class OptionParser {
 			return long_opts;
 		}
 
-		static constexpr std::array<char, 3*N + 2> short_options = build_short_options_(options);
+		static constexpr std::array<char, (3*N) + 2> short_options = build_short_options_(options);
 		static constexpr std::array<struct option, N + 1> long_options = build_long_options_(options);
 
 		static constexpr Helpers::FixedString<help_string_length> generateHelpString(const OptionArray& options) {
