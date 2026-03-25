@@ -782,7 +782,7 @@ class OptionParser {
 			auto token_to_long_name = [&](const char* tok) -> std::string_view {
 				if (!tok) return {};
 				std::string_view sv(tok);
-				if (sv.rfind("--", 0) != 0) return {};
+				if (!sv.starts_with("--")) return {};
 				sv.remove_prefix(2);
 				if (auto eq = sv.find('='); eq != std::string_view::npos) {
 					sv = sv.substr(0, eq);
