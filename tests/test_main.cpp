@@ -82,7 +82,8 @@ static constexpr auto make_main_parser() {
 		XGetOpt::Option<'p', "param", "param", XGetOpt::OptionalArgument>,
 		XGetOpt::Option<1001, "long-only", "long-only", XGetOpt::NoArgument>,
 		XGetOpt::Option<'s', "", "short-only", XGetOpt::NoArgument>,
-		XGetOpt::Option<1002, "long-description", "This item has an extremely long description, which XGetOpt is expected to wrap at 80-character lines for easy display in a terminal. If it fails to do this, it is not functioning properly.", XGetOpt::RequiredArgument, "arg">
+		XGetOpt::Option<1002, "long-description", "This item has an extremely long description, which XGetOpt is expected to wrap at 80-character lines for easy display in a terminal. If it fails to do this, it is not functioning properly.", XGetOpt::RequiredArgument, "arg">,
+		XGetOpt::Option<1003, "newline-description", "This description contains newlines.\nThese should\nbe preserved\nin the\nhelp string,\nand the\nnext line\nshould be\nindented to\nthe description column.", XGetOpt::NoArgument>
 	>{};
 }
 
@@ -461,6 +462,135 @@ static void test_plus_not_recognized_as_option() {
 	TEST_EQ(std::string_view(rem.argv[0]), std::string_view("-+"));
 }
 
+static void test_newlines_in_option_descriptions() {
+	// Newlines in option descriptions should be preserved, and:
+	// 1. The help string generator should not break lines in the middle of words when wrapping, but should break at whitespace.
+	// 2. When a newline is encountered in the description, the next line should be indented to the description column,
+	//  just like a normal line break for wrapping would be.
+
+	constexpr auto parser = make_main_parser();
+	constexpr std::string_view help = parser.getHelpString();
+	TEST_ASSERT(!help.empty());
+
+	auto split_lines = [](std::string_view s) {
+		std::vector<std::string_view> out;
+		size_t start = 0;
+		while (start <= s.size()) {
+			size_t end = s.find('\n', start);
+			if (end == std::string_view::npos) end = s.size();
+			out.push_back(s.substr(start, end - start));
+			if (end == s.size()) break;
+			start = end + 1;
+		}
+		while (!out.empty() && out.back().empty()) out.pop_back();
+		return out;
+	};
+
+	auto is_space_prefix = [](std::string_view line, size_t count) {
+		if (line.size() < count) return false;
+		for (size_t i = 0; i < count; ++i) {
+			if (line[i] != ' ') return false;
+		}
+		return true;
+	};
+
+	auto rstrip_spaces = [](std::string_view s) {
+		while (!s.empty() && s.back() == ' ') s.remove_suffix(1);
+		return s;
+	};
+
+	const auto lines = split_lines(help);
+	TEST_ASSERT(!lines.empty());
+
+	// --- (A) Newlines preserved + indented to the description column ---
+	constexpr std::string_view expected_newline_desc =
+		"This description contains newlines.\n"
+		"These should\n"
+		"be preserved\n"
+		"in the\n"
+		"help string,\n"
+		"and the\n"
+		"next line\n"
+		"should be\n"
+		"indented to\n"
+		"the description column.";
+
+	std::vector<std::string_view> expected_newline_lines;
+	{
+		size_t start = 0;
+		while (start <= expected_newline_desc.size()) {
+			size_t end = expected_newline_desc.find('\n', start);
+			if (end == std::string_view::npos) end = expected_newline_desc.size();
+			expected_newline_lines.push_back(expected_newline_desc.substr(start, end - start));
+			if (end == expected_newline_desc.size()) break;
+			start = end + 1;
+		}
+	}
+	TEST_EQ(expected_newline_lines.size(), size_t{10});
+
+	size_t newline_opt_line = std::string_view::npos;
+	for (size_t i = 0; i < lines.size(); ++i) {
+		if (lines[i].find("--newline-description") != std::string_view::npos) {
+			newline_opt_line = i;
+			break;
+		}
+	}
+	TEST_NE(newline_opt_line, std::string_view::npos);
+
+	const size_t desc_col = lines[newline_opt_line].find(expected_newline_lines[0]);
+	TEST_NE(desc_col, std::string_view::npos);
+
+	// First line contains the option label plus the first description line.
+	TEST_EQ(rstrip_spaces(lines[newline_opt_line].substr(desc_col)), expected_newline_lines[0]);
+
+	// Subsequent lines should be indented to the description column and match each newline-delimited segment exactly.
+	for (size_t k = 1; k < expected_newline_lines.size(); ++k) {
+		const size_t line_index = newline_opt_line + k;
+		TEST_ASSERT(line_index < lines.size());
+		const auto line = lines[line_index];
+		TEST_ASSERT(is_space_prefix(line, desc_col));
+		TEST_EQ(rstrip_spaces(line.substr(desc_col)), expected_newline_lines[k]);
+	}
+
+	// --- (B) Wrapping should not split words (validate by reconstruction) ---
+	// We use the existing long-description option, which wraps at 80 columns.
+	constexpr std::string_view expected_long_desc =
+		"This item has an extremely long description, which XGetOpt is expected to wrap at 80-character lines for easy display in a terminal. If it fails to do this, it is not functioning properly.";
+
+	size_t long_opt_line = std::string_view::npos;
+	for (size_t i = 0; i < lines.size(); ++i) {
+		if (lines[i].find("--long-description") != std::string_view::npos) {
+			long_opt_line = i;
+			break;
+		}
+	}
+	TEST_NE(long_opt_line, std::string_view::npos);
+
+	const size_t long_desc_col = lines[long_opt_line].find("This item has an extremely long description");
+	TEST_NE(long_desc_col, std::string_view::npos);
+
+	// Collect all wrapped lines for this description until the next option line begins.
+	// In the current test parser, the next option after --long-description is --newline-description.
+	std::vector<std::string_view> long_desc_lines;
+	long_desc_lines.push_back(lines[long_opt_line].substr(long_desc_col));
+	for (size_t i = long_opt_line + 1; i < lines.size(); ++i) {
+		if (lines[i].find("--newline-description") != std::string_view::npos) break;
+		if (!is_space_prefix(lines[i], long_desc_col)) break;
+		long_desc_lines.push_back(lines[i].substr(long_desc_col));
+	}
+	TEST_ASSERT(long_desc_lines.size() >= 2); // should wrap at least once
+
+	std::string reconstructed;
+	for (size_t i = 0; i < long_desc_lines.size(); ++i) {
+		if (i) reconstructed.push_back(' ');
+		auto part = rstrip_spaces(long_desc_lines[i]);
+		reconstructed.append(part.data(), part.size());
+	}
+
+	// If wrapping ever split a word, reconstructing with spaces would introduce a space inside that word.
+	TEST_EQ(reconstructed, expected_long_desc);
+}
+
 static void run_test(const char* name, void (*fn)()) {
 	try {
 		fn();
@@ -500,6 +630,7 @@ int main() {
 	run_test("parse_until_before_first_error", test_parse_until_before_first_error_does_not_throw_and_returns_remainder);
 	run_test("ignore_errors_by_multiple_parse", test_ignore_errors_by_multiple_parse);
 	run_test("plus_not_recognized_as_option", test_plus_not_recognized_as_option);
+	run_test("newlines_in_option_descriptions", test_newlines_in_option_descriptions);
 
 	std::cout << "\npassed: " << g_passed << ", failed: " << g_failed << "\n";
 	return g_failed == 0 ? 0 : 1;

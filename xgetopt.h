@@ -39,6 +39,10 @@ constexpr bool is_ws(char c) {
 	return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v';
 }
 
+constexpr bool is_ws_but_not_newline(char c) {
+	return c == ' ' || c == '\t' || c == '\r' || c == '\f' || c == '\v';
+}
+
 /**
  * @struct FixedString
  * @brief A fixed-size string class for compile-time string manipulation
@@ -280,8 +284,6 @@ constexpr size_t option_label_length(const T& option) {
 			break;
 	}
 
-	//length += 1; // Null terminator
-
 	return length;
 }
 
@@ -335,8 +337,18 @@ constexpr size_t calculate_help_string_length(const std::array<T, N>& options) {
 
 		while (idx < desc.size()) {
 			// Skip whitespace
-			while (idx < desc.size() && is_ws(desc[idx])) ++idx;
+			while (idx < desc.size() && is_ws_but_not_newline(desc[idx])) ++idx;
 			if (idx >= desc.size()) break;
+
+			// On newline,
+			// Add a line break, and then indent to the description column on the next line
+			if (desc[idx] == '\n') {
+				total_length += 1; // '\n'
+				total_length += max_label_length + 3; // indentation to description column
+				pos = max_label_length + 3;
+				idx++;
+				continue;
+			}
 
 			// Find word end
 			size_t end = idx;
@@ -692,8 +704,18 @@ class OptionParser {
 				size_t idx = 0;
 
 				while (idx < desc.size()) {
-					while (idx < desc.size() && Helpers::is_ws(desc[idx])) ++idx;
+					while (idx < desc.size() && Helpers::is_ws_but_not_newline(desc[idx])) ++idx;
 					if (idx >= desc.size()) break;
+
+					// On newline,
+					// Add a line break, and then indent to the description column on the next line
+					if (desc[idx] == '\n') {
+						help_string.append('\n');
+						help_string.append(' ', desc_col);
+						pos = desc_col;
+						idx++;
+						continue;
+					}
 
 					size_t end = idx;
 					while (end < desc.size() && !Helpers::is_ws(desc[end])) ++end;
