@@ -1,3 +1,23 @@
+xgetopt (1.0.1) unstable; urgency=medium
+
+  * Bug fix: Respect explicit newlines in option descriptions
+    Previously, these explicit newlines were mistakenly ignored.
+    Added accompanying regression test.
+  * Code style improvements:
+    Use 'starts_with' instead of rfind
+    Add copy/move constructors to FixedString internal helper class
+    Restrict StopCondition to 8 bits
+  * Added test for '-+'
+    XGetOpt prepends a '+' character to the shortopt string to enforce
+    POSIX-style parsing (REQUIRE_ORDER)
+    Some getopt implementations may not support this (although so far
+    every one tested does), in which case '+' would be treated as a normal
+    option
+    The new test case verifies that '+' is not treated as a normal
+    option character (i.e., passing '-+' throws with 'unknown option')
+
+ -- rail5 <andrew@rail5.org>  Thu, 26 Mar 2026 22:48:40 +0800
+
 xgetopt (1.0.0) unstable; urgency=medium
 
   * SemVer v1.0.0 release:
