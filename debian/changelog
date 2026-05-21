@@ -1,3 +1,13 @@
+xgetopt (1.0.2) unstable; urgency=medium
+
+  * Added 'getArgumentFor(shortopt)' method to OptionSequence class
+    Returns a std::optional<std::string_view> containing either the argument
+    for that option, or std::nullopt if that option was not provided, or did
+    not come with an argument.
+    This is not a breaking change.
+
+ -- rail5 <andrew@rail5.org>  Thu, 21 May 2026 18:22:34 +0800
+
 xgetopt (1.0.1) unstable; urgency=medium
 
   * Bug fix: Respect explicit newlines in option descriptions

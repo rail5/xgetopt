@@ -23,6 +23,8 @@ int main(int argc, char* argv[]) {
 		return 1;
 	}
 
+	auto output_file = options.getArgumentFor('o');
+
 	for (const auto& opt : options) {
 		switch (opt.getShortOpt()) {
 			case 'h':
