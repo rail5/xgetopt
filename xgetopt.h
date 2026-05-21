@@ -493,6 +493,17 @@ class OptionSequence {
 				});
 		}
 
+		std::optional<std::string_view> getArgumentFor(int shortopt) const {
+			auto it = std::find_if(options.begin(), options.end(),
+				[shortopt](const ParsedOption& opt) {
+					return opt.getShortOpt() == shortopt;
+				});
+			if (it != options.end()) {
+				return it->getArgument();
+			}
+			return std::nullopt;
+		}
+
 		/**
 		 * @brief Get a std::vector of all non-option arguments provided, in the order they were given
 		 * 

@@ -47,6 +47,9 @@ int main(int argc, char* argv[]) {
 		return 1;
 	}
 
+	auto output_file = options.getArgumentFor('o'); // Get the argument for the 'o' option, if it was provided
+
+	// Iterate over all provided options
 	for (const auto& opt : options) {
 		switch (opt.getShortOpt()) {
 			case 'h':
