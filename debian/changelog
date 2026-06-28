@@ -1,3 +1,10 @@
+xgetopt (1.1.1) unstable; urgency=medium
+
+  * Replaced occurrences of size_t/uint8_t with std::size_t/std::uint8_t
+    No functional changes
+
+ -- rail5 <andrew@rail5.org>  Sun, 28 Jun 2026 10:40:56 +0800
+
 xgetopt (1.1.0) unstable; urgency=medium
 
   * Added 'getArgumentFor(shortopt)' method to OptionSequence class
