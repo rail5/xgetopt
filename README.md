@@ -19,7 +19,7 @@ XGetOpt is a simple, **header-only, constexpr-first** C++20 library for parsing 
 The basic design goals are:
 
  - Simple to use
- - No added cost compared to using `getopt_long` directly
+ - Don't do anything at run-time that can be done at compile-time
  - Preservation of familiar semantics
 
 ## Example Usage
@@ -47,7 +47,7 @@ int main(int argc, char* argv[]) {
 		return 1;
 	}
 
-	auto output_file = options.getArgumentFor('o'); // Get the argument for the 'o' option, if it was provided
+	auto output_file = options.getFirstArgumentFor('o'); // Get the first argument for the 'o' option, if it was provided
 
 	// Iterate over all provided options
 	for (const auto& opt : options) {
@@ -57,7 +57,7 @@ int main(int argc, char* argv[]) {
 				return 0;
 			case 'p': // Optional argument
 				if (opt.hasArgument()) {
-					std::cout << "Parameter option with argument: " << opt.getArgument() << std::endl;
+					std::cout << "Parameter option with argument: " << opt.getArgument().value() << std::endl;
 				} else {
 					std::cout << "Parameter option with no argument" << std::endl;
 				}

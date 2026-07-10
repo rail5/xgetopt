@@ -415,8 +415,8 @@ class ParsedOption {
 			return argument.has_value();
 		}
 
-		std::string_view getArgument() const {
-			return argument.value_or(std::string_view{});
+		std::optional<std::string_view> getArgument() const {
+			return argument;
 		}
 };
 
@@ -493,15 +493,31 @@ class OptionSequence {
 				});
 		}
 
-		std::optional<std::string_view> getArgumentFor(int shortopt) const {
-			auto it = std::find_if(options.begin(), options.end(),
-				[shortopt](const ParsedOption& opt) {
-					return opt.getShortOpt() == shortopt;
-				});
-			if (it != options.end()) {
-				return it->getArgument();
+		/**
+		 * @brief Get the argument passed to the first occurrence of the option with the given shortopt, if any
+		 * 
+		 * @param shortopt The shortopt character or unique integer identifier of the option to retrieve the argument for
+		 * @return std::optional<std::string_view> The argument passed to the option, or std::nullopt if the option was not provided or had no argument
+		 */
+		std::optional<std::string_view> getFirstArgumentFor(int shortopt) const {
+			for (const auto& opt : options) {
+				if (opt.getShortOpt() == shortopt) return opt.getArgument();
 			}
 			return std::nullopt;
+		}
+
+		/**
+		 * @brief Get a std::vector of all arguments passed to the option with the given shortopt, in the order they were provided
+		 * 
+		 * @param shortopt The shortopt character or unique integer identifier of the option to retrieve arguments for
+		 * @return std::vector<std::optional<std::string_view>> A vector of all arguments passed to the option, in the order they were provided. Each element is std::nullopt if the corresponding occurrence of the option had no argument.
+		 */
+		std::vector<std::optional<std::string_view>> getAllArgumentsFor(int shortopt) const {
+			std::vector<std::optional<std::string_view>> args;
+			for (const auto& opt : options) {
+				if (opt.getShortOpt() == shortopt) args.push_back(opt.getArgument());
+			}
+			return args;
 		}
 
 		/**
@@ -766,9 +782,44 @@ class OptionParser {
 
 		static constexpr Helpers::FixedString<help_string_length> help_string
 			= generateHelpString(options);
+	public:
+		/**
+		 * @brief Get the compile-time generated help string
+		 * 
+		 * @return constexpr std::string_view The help string for this option parser detailing all options
+		 */
+		constexpr std::string_view getHelpString() const {
+			return help_string.view();
+		}
 
-		template <StopCondition parseUntil>
-		std::pair<OptionSequence, OptionRemainder> parse_impl(int argc, char* argv[]) const {
+		constexpr const OptionArray& getOptions() const {
+			return options;
+		}
+
+		/**
+		 * @brief Parse command-line arguments according to the defined options
+		 * 
+		 * @param argc The argument count
+		 * @param argv The argument vector
+		 * @return OptionSequence The sequence of parsed options and non-option arguments
+		 */
+		OptionSequence parse(int argc, char** argv) const {
+			return parse_until<AllOptions>(argc, argv).first;
+		}
+
+		/**
+		 * @brief Parse command-line arguments until a specified condition is met
+		 *
+		 * This overload allows specifying a condition to stop parsing early,
+		 * such as stopping at the first non-option argument or the first error.
+		 * 
+		 * @tparam end The condition to stop parsing at
+		 * @param argc The argument count
+		 * @param argv The argument vector
+		 * @return std::pair<OptionSequence, OptionRemainder> A pair containing the parsed options and the remaining unparsed arguments
+		 */
+		template<StopCondition end>
+		std::pair<OptionSequence, OptionRemainder> parse_until(int argc, char** argv) const {
 			OptionSequence parsed_options;
 			OptionRemainder unparsed_options{argc, argv};
 
@@ -837,10 +888,10 @@ class OptionParser {
 					// and then returns -1.
 					// In our case, we still want to collect the remaining tokens as non-option arguments.
 					if (optind > 0 && std::string_view(argv[optind - 1]) == "--") {
-						if constexpr (parseUntil == BeforeFirstNonOptionArgument) {
+						if constexpr (end == BeforeFirstNonOptionArgument) {
 							remainder_start = token_index;
 							break;
-						} else if constexpr (parseUntil == AfterFirstNonOptionArgument) {
+						} else if constexpr (end == AfterFirstNonOptionArgument) {
 							// Include the first non-option argument (which is argv[optind])
 							parsed_options.addNonOptionArgument(std::string_view(argv[optind]));
 							optind++; // Consume
@@ -856,10 +907,10 @@ class OptionParser {
 					}
 
 					// If we're here, we have a non-option argument to process
-					if constexpr (parseUntil == BeforeFirstNonOptionArgument) {
+					if constexpr (end == BeforeFirstNonOptionArgument) {
 						remainder_start = token_index;
 						break;
-					} else if constexpr (parseUntil == AfterFirstNonOptionArgument) {
+					} else if constexpr (end == AfterFirstNonOptionArgument) {
 						parsed_options.addNonOptionArgument(std::string_view(argv[optind]));
 						optind++; // Consume
 						remainder_start = optind;
@@ -875,7 +926,7 @@ class OptionParser {
 
 				// Error handling
 				if (opt == '?') {
-					if constexpr (parseUntil == BeforeFirstError) {
+					if constexpr (end == BeforeFirstError) {
 						remainder_start = token_index; // include offending token in remainder
 						break;
 					}
@@ -930,46 +981,6 @@ class OptionParser {
 			unparsed_options.argc = argc - start;
 			unparsed_options.argv = &argv[start];
 			return {parsed_options, unparsed_options};
-		}
-	public:
-		/**
-		 * @brief Get the compile-time generated help string
-		 * 
-		 * @return constexpr std::string_view The help string for this option parser detailing all options
-		 */
-		constexpr std::string_view getHelpString() const {
-			return help_string.view();
-		}
-
-		constexpr const OptionArray& getOptions() const {
-			return options;
-		}
-
-		/**
-		 * @brief Parse command-line arguments according to the defined options
-		 * 
-		 * @param argc The argument count
-		 * @param argv The argument vector
-		 * @return OptionSequence The sequence of parsed options and non-option arguments
-		 */
-		OptionSequence parse(int argc, char* argv[]) const {
-			return parse_impl<AllOptions>(argc, argv).first;
-		}
-
-		/**
-		 * @brief Parse command-line arguments until a specified condition is met
-		 *
-		 * This overload allows specifying a condition to stop parsing early,
-		 * such as stopping at the first non-option argument or the first error.
-		 * 
-		 * @tparam end The condition to stop parsing at
-		 * @param argc The argument count
-		 * @param argv The argument vector
-		 * @return std::pair<OptionSequence, OptionRemainder> A pair containing the parsed options and the remaining unparsed arguments
-		 */
-		template<StopCondition end>
-		std::pair<OptionSequence, OptionRemainder> parse_until(int argc, char* argv[]) const {
-			return parse_impl<end>(argc, argv);
 		}
 };
 

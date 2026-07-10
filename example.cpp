@@ -23,7 +23,7 @@ int main(int argc, char* argv[]) {
 		return 1;
 	}
 
-	auto output_file = options.getArgumentFor('o');
+	auto output_file = options.getFirstArgumentFor('o');
 
 	for (const auto& opt : options) {
 		switch (opt.getShortOpt()) {
@@ -31,12 +31,12 @@ int main(int argc, char* argv[]) {
 				std::cout << parser.getHelpString();
 				return 0;
 			case 'o':
-				std::cout << "Output file: " << opt.getArgument() << std::endl;
+				std::cout << "Output file: " << opt.getArgument().value() << std::endl;
 				break;
 			case 'p':
 				std::cout << "-p given";
 				if (opt.hasArgument()) {
-					std::cout << " with argument: " << opt.getArgument();
+					std::cout << " with argument: " << opt.getArgument().value();
 				} else {
 					std::cout << " with no argument";
 				}
@@ -46,7 +46,7 @@ int main(int argc, char* argv[]) {
 				std::cout << "--long-option-only given" << std::endl;
 				break;
 			case 1002:
-				std::cout << "--long-option-with-arg given with argument: " << opt.getArgument() << std::endl;
+				std::cout << "--long-option-with-arg given with argument: " << opt.getArgument().value() << std::endl;
 				break;
 			case 's':
 				std::cout << "-s given" << std::endl;
