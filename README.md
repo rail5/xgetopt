@@ -153,7 +153,7 @@ sudo apt install xgetopt-dev
 
 ## Compatibility
 
-XGetOpt does not guarantee compatibility outside of the GNU ecosystem, but it should work with most `getopt_long` implementations. See the [tests/README.md](tests/) for a table of tested platforms.
+XGetOpt does not guarantee compatibility outside of the GNU ecosystem, but it should work with most `getopt_long` implementations. See the [tests/README.md](tests/README.md) for a table of tested platforms.
 
 ## License
 
