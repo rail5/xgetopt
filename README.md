@@ -18,9 +18,9 @@ XGetOpt is a simple, **header-only, constexpr-first** C++20 library for parsing 
 
 The basic design goals are:
 
- - Simple to use
+ - Keep it simple to use
  - Don't do anything at run-time that can be done at compile-time
- - Preservation of familiar semantics
+ - Preserve familiar semantics
 
 ## Example Usage
 
